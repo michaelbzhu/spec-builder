@@ -24,7 +24,53 @@ function CommentCard({ comment }: { comment: Comment }) {
   );
 }
 
-export function App() {
+function PromptView() {
+  const [input, setInput] = useState("");
+  const generateSpec = useEditorStore((s) => s.generateSpec);
+  const generating = useEditorStore((s) => s.generating);
+
+  const handleSubmit = useCallback(() => {
+    if (!input.trim() || generating) return;
+    generateSpec(input.trim());
+  }, [input, generating, generateSpec]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSubmit();
+      }
+    },
+    [handleSubmit]
+  );
+
+  return (
+    <div className="prompt-view">
+      <div className="prompt-box">
+        <h1 className="prompt-title">What do you want to build?</h1>
+        <textarea
+          className="prompt-input"
+          placeholder="Describe your idea..."
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          autoFocus
+          disabled={generating}
+          rows={3}
+        />
+        <button
+          className="prompt-submit"
+          onClick={handleSubmit}
+          disabled={!input.trim() || generating}
+        >
+          {generating ? "Generating..." : "Generate Spec"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EditorView() {
   const markdown = useEditorStore((s) => s.markdown);
   const setMarkdown = useEditorStore((s) => s.setMarkdown);
   const pendingSelection = useEditorStore((s) => s.pendingSelection);
@@ -127,7 +173,6 @@ export function App() {
   );
 
   const handleScroll = useCallback(() => {
-    // Close popover on scroll to avoid misalignment
     if (showPopover) {
       setShowPopover(false);
     }
@@ -201,6 +246,11 @@ export function App() {
       </div>
     </div>
   );
+}
+
+export function App() {
+  const view = useEditorStore((s) => s.view);
+  return view === "prompt" ? <PromptView /> : <EditorView />;
 }
 
 export default App;

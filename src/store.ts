@@ -13,8 +13,11 @@ export interface Comment {
 }
 
 interface EditorStore {
+  view: "prompt" | "editor";
+  generating: boolean;
   markdown: string;
   setMarkdown: (md: string) => void;
+  generateSpec: (prompt: string) => void;
   comments: Comment[];
   addComment: (
     selectedText: string,
@@ -30,52 +33,32 @@ interface EditorStore {
 }
 
 export const useEditorStore = create<EditorStore>((set, get) => ({
-  markdown: `# Markdown Editor
-
-Welcome to the **Markdown Editor**! Highlight text and add comments to get started.
-
-## Features
-
-- **Comment system** — highlight text and add comments
-- **LLM responses** — get AI feedback on your writing
-- Supports all standard Markdown syntax
-- Clean, minimal interface
-
-## Syntax Examples
-
-### Text Formatting
-
-*Italic*, **bold**, and \`inline code\`.
-
-### Links & Images
-
-[Visit GitHub](https://github.com)
-
-### Code Blocks
-
-\`\`\`javascript
-function greet(name) {
-  return \`Hello, \${name}!\`;
-}
-\`\`\`
-
-### Blockquotes
-
-> "The best way to predict the future is to invent it."
-> — Alan Kay
-
-### Lists
-
-1. First item
-2. Second item
-3. Third item
-
----
-
-Happy writing!
-`,
+  view: "prompt",
+  generating: false,
+  markdown: "",
 
   setMarkdown: (md) => set({ markdown: md }),
+
+  generateSpec: (prompt: string) => {
+    set({ generating: true });
+    fetch("/api/generate-spec", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    })
+      .then((res) => res.json())
+      .then((data: any) => {
+        const spec = data.response ?? "# Error\n\nFailed to generate spec.";
+        set({ markdown: spec, view: "editor", generating: false });
+      })
+      .catch((err) => {
+        set({
+          markdown: `# Error\n\n${err.message}`,
+          view: "editor",
+          generating: false,
+        });
+      });
+  },
 
   comments: [],
 

@@ -11,6 +11,37 @@ const server = serve({
   routes: {
     "/*": index,
 
+    "/api/generate-spec": {
+      POST: async (req) => {
+        try {
+          const { prompt } = await req.json();
+          const completion = await openai.chat.completions.create({
+            model: "deepseek/deepseek-v3.2",
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You are a product spec writer. Given a user's idea of what they want to build, generate a clear, well-structured markdown specification document. Include sections for overview, goals, features, user stories, and technical considerations. Be concise but thorough. Output only the markdown document, no preamble.",
+              },
+              {
+                role: "user",
+                content: prompt,
+              },
+            ],
+          });
+          const response =
+            completion.choices[0]?.message?.content ?? "No response generated.";
+          return Response.json({ response });
+        } catch (err: any) {
+          console.error("OpenRouter error:", err);
+          return Response.json(
+            { error: err.message ?? "LLM request failed" },
+            { status: 500 }
+          );
+        }
+      },
+    },
+
     "/api/comment": {
       POST: async (req) => {
         try {
