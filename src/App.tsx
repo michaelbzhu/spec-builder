@@ -3,6 +3,64 @@ import { useEditorStore, type Comment } from "./store";
 
 import "./index.css";
 
+function Toolbar() {
+  const activeDoc = useEditorStore((s) =>
+    s.documents.find((d) => d.id === s.activeDocumentId)
+  );
+  const showComments = useEditorStore((s) => s.showComments);
+  const toggleComments = useEditorStore((s) => s.toggleComments);
+  const undo = useEditorStore((s) => s.undo);
+  const redo = useEditorStore((s) => s.redo);
+  const canUndo = useEditorStore((s) => s.canUndo());
+  const canRedo = useEditorStore((s) => s.canRedo());
+
+  const charCount = activeDoc?.markdown.length ?? 0;
+  const commentCount = activeDoc?.comments.length ?? 0;
+
+  return (
+    <div className="editor-toolbar">
+      <div className="toolbar-left">
+        <span className="toolbar-char-count">{charCount} chars</span>
+      </div>
+      <div className="toolbar-right">
+        <button
+          className={`toolbar-btn toolbar-comments-btn ${showComments ? "active" : ""}`}
+          onClick={toggleComments}
+          title="Toggle comments"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <span>{commentCount}</span>
+        </button>
+        <div className="toolbar-divider" />
+        <button
+          className="toolbar-btn"
+          onClick={undo}
+          disabled={!canUndo}
+          title="Undo (Ctrl+Z)"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 7v6h6"></path>
+            <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path>
+          </svg>
+        </button>
+        <button
+          className="toolbar-btn"
+          onClick={redo}
+          disabled={!canRedo}
+          title="Redo (Ctrl+Shift+Z)"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 7v6h-6"></path>
+            <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CommentCard({ comment }: { comment: Comment }) {
   return (
     <div
@@ -119,6 +177,9 @@ function EditorView() {
   const pendingSelection = useEditorStore((s) => s.pendingSelection);
   const setPendingSelection = useEditorStore((s) => s.setPendingSelection);
   const addComment = useEditorStore((s) => s.addComment);
+  const showComments = useEditorStore((s) => s.showComments);
+  const undo = useEditorStore((s) => s.undo);
+  const redo = useEditorStore((s) => s.redo);
 
   const markdown = activeDoc?.markdown ?? "";
   const comments = activeDoc?.comments ?? [];
@@ -171,6 +232,18 @@ function EditorView() {
         setPendingSelection(null);
         return;
       }
+      // Undo: Ctrl/Cmd+Z
+      if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+        return;
+      }
+      // Redo: Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y
+      if ((e.metaKey || e.ctrlKey) && (e.key === "z" && e.shiftKey || e.key === "y")) {
+        e.preventDefault();
+        redo();
+        return;
+      }
       if (e.key === "Tab") {
         e.preventDefault();
         const textarea = e.currentTarget;
@@ -183,7 +256,7 @@ function EditorView() {
         });
       }
     },
-    [setMarkdown, setPendingSelection]
+    [setMarkdown, setPendingSelection, undo, redo]
   );
 
   const handleMouseDown = useCallback(
@@ -342,12 +415,15 @@ function EditorView() {
           )}
         </div>
 
-        <div className="comments-margin">
-          {comments.map((c) => (
-            <CommentCard key={c.id} comment={c} />
-          ))}
-        </div>
+        {showComments && (
+          <div className="comments-margin">
+            {comments.map((c) => (
+              <CommentCard key={c.id} comment={c} />
+            ))}
+          </div>
+        )}
       </div>
+      <Toolbar />
     </div>
   );
 }

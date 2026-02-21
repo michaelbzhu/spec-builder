@@ -27,11 +27,19 @@ function deriveTitle(markdown: string): string {
   return "Untitled";
 }
 
+interface HistoryEntry {
+  documentId: string;
+  markdown: string;
+}
+
 interface EditorStore {
   view: "prompt" | "editor";
   generating: boolean;
   documents: Document[];
   activeDocumentId: string | null;
+  showComments: boolean;
+  history: HistoryEntry[];
+  historyIndex: number;
   generateSpec: (prompt: string) => void;
   setMarkdown: (md: string) => void;
   addComment: (
@@ -44,6 +52,11 @@ interface EditorStore {
   switchDocument: (id: string) => void;
   deleteDocument: (id: string) => void;
   goToPrompt: () => void;
+  toggleComments: () => void;
+  undo: () => void;
+  redo: () => void;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
   pendingSelection: { text: string; startLine: number; endLine: number } | null;
   setPendingSelection: (
     sel: { text: string; startLine: number; endLine: number } | null
@@ -70,6 +83,9 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   generating: false,
   documents: [defaultDoc],
   activeDocumentId: "welcome",
+  showComments: true,
+  history: [],
+  historyIndex: -1,
 
   goToPrompt: () => set({ view: "prompt", pendingSelection: null }),
 
@@ -93,8 +109,24 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   },
 
   setMarkdown: (md) => {
-    const { activeDocumentId } = get();
+    const { activeDocumentId, history, historyIndex } = get();
     if (!activeDocumentId) return;
+
+    // Add current state to history before changing
+    const currentDoc = get().documents.find((d) => d.id === activeDocumentId);
+    if (currentDoc && currentDoc.markdown !== md) {
+      const newHistory = history.slice(0, historyIndex + 1);
+      newHistory.push({ documentId: activeDocumentId, markdown: currentDoc.markdown });
+      // Keep only last 50 entries
+      if (newHistory.length > 50) {
+        newHistory.shift();
+      }
+      set({
+        history: newHistory,
+        historyIndex: newHistory.length - 1,
+      });
+    }
+
     set((state) => ({
       documents: state.documents.map((d) =>
         d.id === activeDocumentId
@@ -102,6 +134,54 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
           : d
       ),
     }));
+  },
+
+  toggleComments: () => set((state) => ({ showComments: !state.showComments })),
+
+  undo: () => {
+    const { history, historyIndex, activeDocumentId } = get();
+    if (historyIndex < 0 || !activeDocumentId) return;
+
+    const entry = history[historyIndex];
+    if (entry.documentId !== activeDocumentId) return;
+
+    // Save current state for redo
+    const currentDoc = get().documents.find((d) => d.id === activeDocumentId);
+    if (!currentDoc) return;
+
+    set((state) => ({
+      historyIndex: historyIndex - 1,
+      documents: state.documents.map((d) =>
+        d.id === activeDocumentId ? { ...d, markdown: entry.markdown, title: deriveTitle(entry.markdown) } : d
+      ),
+    }));
+  },
+
+  redo: () => {
+    const { history, historyIndex, activeDocumentId } = get();
+    if (historyIndex >= history.length - 1 || !activeDocumentId) return;
+
+    const entry = history[historyIndex + 1];
+    if (entry.documentId !== activeDocumentId) return;
+
+    set((state) => ({
+      historyIndex: historyIndex + 1,
+      documents: state.documents.map((d) =>
+        d.id === activeDocumentId ? { ...d, markdown: entry.markdown, title: deriveTitle(entry.markdown) } : d
+      ),
+    }));
+  },
+
+  canUndo: () => {
+    const { history, historyIndex, activeDocumentId } = get();
+    if (historyIndex < 0 || !activeDocumentId) return false;
+    return history[historyIndex]?.documentId === activeDocumentId;
+  },
+
+  canRedo: () => {
+    const { history, historyIndex, activeDocumentId } = get();
+    if (historyIndex >= history.length - 1 || !activeDocumentId) return false;
+    return history[historyIndex + 1]?.documentId === activeDocumentId;
   },
 
   generateSpec: (prompt: string) => {
