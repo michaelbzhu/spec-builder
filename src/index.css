@@ -267,10 +267,6 @@ body {
   border-left: 3px solid var(--blue);
 }
 
-.editor-textarea.line-selecting {
-  cursor: default;
-}
-
 .editor-textarea.line-selecting::selection {
   background: transparent;
 }

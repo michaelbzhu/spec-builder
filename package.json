@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "marked": "^17.0.3",
-    "@anthropic-ai/sdk": "^0.39.0",
+    "openai": "^4.85.4",
     "react": "^19",
     "react-dom": "^19",
     "zustand": "^5.0.11"
