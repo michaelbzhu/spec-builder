@@ -5,7 +5,8 @@ export interface EditSuggestion {
   oldString: string;
   newString: string;
   reasoning: string;
-  status: "pending" | "accepted" | "rejected";
+  status: "previewing" | "accepted" | "rejected";
+  backupMarkdown: string;
   createdAt: number;
 }
 
@@ -37,19 +38,12 @@ function deriveTitle(markdown: string): string {
   return "Untitled";
 }
 
-interface HistoryEntry {
-  documentId: string;
-  markdown: string;
-}
-
 interface EditorStore {
   view: "prompt" | "editor";
   generating: boolean;
   documents: Document[];
   activeDocumentId: string | null;
   showComments: boolean;
-  history: HistoryEntry[];
-  historyIndex: number;
   generateSpec: (prompt: string) => void;
   setMarkdown: (md: string) => void;
   addComment: (
@@ -63,10 +57,6 @@ interface EditorStore {
   deleteDocument: (id: string) => void;
   goToPrompt: () => void;
   toggleComments: () => void;
-  undo: () => void;
-  redo: () => void;
-  canUndo: () => boolean;
-  canRedo: () => boolean;
   applyEdit: (commentId: string) => void;
   rejectEdit: (commentId: string) => void;
   dismissEdit: (commentId: string) => void;
@@ -91,14 +81,42 @@ This is your default document. Start editing or create a new document from the s
   comments: [],
 };
 
+// Create a preview markdown that shows old text (red) and new text (green)
+function createPreviewMarkdown(
+  originalMarkdown: string,
+  oldString: string,
+  newString: string
+): string {
+  // We use special markers that the UI can interpret as highlights
+  // Format: <<<REMOVE>>>old text<<<END>>>text in between<<<ADD>>>new text<<<END>>>
+  const escapedOld = oldString.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(escapedOld, "g");
+  
+  return originalMarkdown.replace(regex, (match) => {
+    return `<<<REMOVE>>>${match}<<<END>>><<<ADD>>>${newString}<<<END>>>`;
+  });
+}
+
+// Extract the actual content (new version) from preview markdown
+function extractNewVersion(previewMarkdown: string): string {
+  return previewMarkdown
+    .replace(/<<<REMOVE>>>[\s\S]*?<<<END>>>/g, "")
+    .replace(/<<<ADD>>>([\s\S]*?)<<<END>>>/g, "$1");
+}
+
+// Extract the backup content (old version) from preview markdown
+function extractOldVersion(previewMarkdown: string, oldString: string): string {
+  return previewMarkdown
+    .replace(/<<<ADD>>>[\s\S]*?<<<END>>>/g, "")
+    .replace(/<<<REMOVE>>>([\s\S]*?)<<<END>>>/g, "$1");
+}
+
 export const useEditorStore = create<EditorStore>((set, get) => ({
   view: "editor",
   generating: false,
   documents: [defaultDoc],
   activeDocumentId: "welcome",
   showComments: true,
-  history: [],
-  historyIndex: -1,
 
   goToPrompt: () => set({ view: "prompt", pendingSelection: null }),
 
@@ -122,23 +140,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   },
 
   setMarkdown: (md) => {
-    const { activeDocumentId, history, historyIndex } = get();
+    const { activeDocumentId } = get();
     if (!activeDocumentId) return;
-
-    // Add current state to history before changing
-    const currentDoc = get().documents.find((d) => d.id === activeDocumentId);
-    if (currentDoc && currentDoc.markdown !== md) {
-      const newHistory = history.slice(0, historyIndex + 1);
-      newHistory.push({ documentId: activeDocumentId, markdown: currentDoc.markdown });
-      // Keep only last 50 entries
-      if (newHistory.length > 50) {
-        newHistory.shift();
-      }
-      set({
-        history: newHistory,
-        historyIndex: newHistory.length - 1,
-      });
-    }
 
     set((state) => ({
       documents: state.documents.map((d) =>
@@ -151,52 +154,6 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
 
   toggleComments: () => set((state) => ({ showComments: !state.showComments })),
 
-  undo: () => {
-    const { history, historyIndex, activeDocumentId } = get();
-    if (historyIndex < 0 || !activeDocumentId) return;
-
-    const entry = history[historyIndex];
-    if (entry.documentId !== activeDocumentId) return;
-
-    // Save current state for redo
-    const currentDoc = get().documents.find((d) => d.id === activeDocumentId);
-    if (!currentDoc) return;
-
-    set((state) => ({
-      historyIndex: historyIndex - 1,
-      documents: state.documents.map((d) =>
-        d.id === activeDocumentId ? { ...d, markdown: entry.markdown, title: deriveTitle(entry.markdown) } : d
-      ),
-    }));
-  },
-
-  redo: () => {
-    const { history, historyIndex, activeDocumentId } = get();
-    if (historyIndex >= history.length - 1 || !activeDocumentId) return;
-
-    const entry = history[historyIndex + 1];
-    if (entry.documentId !== activeDocumentId) return;
-
-    set((state) => ({
-      historyIndex: historyIndex + 1,
-      documents: state.documents.map((d) =>
-        d.id === activeDocumentId ? { ...d, markdown: entry.markdown, title: deriveTitle(entry.markdown) } : d
-      ),
-    }));
-  },
-
-  canUndo: () => {
-    const { history, historyIndex, activeDocumentId } = get();
-    if (historyIndex < 0 || !activeDocumentId) return false;
-    return history[historyIndex]?.documentId === activeDocumentId;
-  },
-
-  canRedo: () => {
-    const { history, historyIndex, activeDocumentId } = get();
-    if (historyIndex >= history.length - 1 || !activeDocumentId) return false;
-    return history[historyIndex + 1]?.documentId === activeDocumentId;
-  },
-
   applyEdit: (commentId: string) => {
     const { activeDocumentId } = get();
     if (!activeDocumentId) return;
@@ -207,42 +164,10 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     const comment = doc.comments.find((c) => c.id === commentId);
     if (!comment?.editSuggestion) return;
 
-    const { oldString, newString } = comment.editSuggestion;
-
-    // Check if oldString exists in the document
-    if (!doc.markdown.includes(oldString)) {
-      console.error("Old string not found in document");
-      // Mark as rejected since we can't apply it
-      set((state) => ({
-        documents: state.documents.map((d) =>
-          d.id === activeDocumentId
-            ? {
-                ...d,
-                comments: d.comments.map((c) =>
-                  c.id === commentId
-                    ? { ...c, editSuggestion: { ...c.editSuggestion!, status: "rejected" } }
-                    : c
-                ),
-              }
-            : d
-        ),
-      }));
-      return;
-    }
-
-    // Save current state to history before applying edit
-    const newHistory = get().history.slice(0, get().historyIndex + 1);
-    newHistory.push({ documentId: activeDocumentId, markdown: doc.markdown });
-    if (newHistory.length > 50) {
-      newHistory.shift();
-    }
-
-    // Perform the replacement
-    const newMarkdown = doc.markdown.replace(oldString, newString);
+    // Extract and apply the new version (remove markers, keep new content)
+    const newMarkdown = extractNewVersion(doc.markdown);
 
     set((state) => ({
-      history: newHistory,
-      historyIndex: newHistory.length - 1,
       documents: state.documents.map((d) =>
         d.id === activeDocumentId
           ? {
@@ -264,11 +189,22 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     const { activeDocumentId } = get();
     if (!activeDocumentId) return;
 
+    const doc = get().documents.find((d) => d.id === activeDocumentId);
+    if (!doc) return;
+
+    const comment = doc.comments.find((c) => c.id === commentId);
+    if (!comment?.editSuggestion) return;
+
+    const { backupMarkdown } = comment.editSuggestion;
+
+    // Restore the backup and mark as rejected
     set((state) => ({
       documents: state.documents.map((d) =>
         d.id === activeDocumentId
           ? {
               ...d,
+              markdown: backupMarkdown,
+              title: deriveTitle(backupMarkdown),
               comments: d.comments.map((c) =>
                 c.id === commentId
                   ? { ...c, editSuggestion: { ...c.editSuggestion!, status: "rejected" } }
@@ -376,16 +312,31 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
         
         // Check if there's a tool call (edit suggestion)
         let editSuggestion: EditSuggestion | undefined;
+        let previewMarkdown: string | undefined;
+
         if (data.toolCall && data.toolCall.name === "edit_document") {
           const args = data.toolCall.arguments;
-          editSuggestion = {
-            id: crypto.randomUUID(),
-            oldString: args.oldString,
-            newString: args.newString,
-            reasoning: args.reasoning,
-            status: "pending",
-            createdAt: Date.now(),
-          };
+          const doc = get().documents.find((d) => d.id === activeDocumentId);
+          
+          if (doc && doc.markdown.includes(args.oldString)) {
+            // Save backup and create preview markdown
+            const backupMarkdown = doc.markdown;
+            previewMarkdown = createPreviewMarkdown(
+              doc.markdown,
+              args.oldString,
+              args.newString
+            );
+            
+            editSuggestion = {
+              id: crypto.randomUUID(),
+              oldString: args.oldString,
+              newString: args.newString,
+              reasoning: args.reasoning,
+              status: "previewing",
+              backupMarkdown,
+              createdAt: Date.now(),
+            };
+          }
         }
 
         set((state) => ({
@@ -393,6 +344,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
             d.id === activeDocumentId
               ? {
                   ...d,
+                  markdown: previewMarkdown ?? d.markdown,
+                  title: previewMarkdown ? deriveTitle(extractNewVersion(previewMarkdown)) : d.title,
                   comments: d.comments.map((c) =>
                     c.id === commentId
                       ? { ...c, llmResponse: response, loading: false, editSuggestion }

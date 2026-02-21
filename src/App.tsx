@@ -3,6 +3,76 @@ import { useEditorStore, type Comment } from "./store";
 
 import "./index.css";
 
+// Parse preview markdown and render with highlights
+function PreviewContent({ markdown }: { markdown: string }) {
+  // Split by markers and render with appropriate styling
+  const parts: Array<{ type: "normal" | "remove" | "add"; content: string }> = [];
+  
+  let remaining = markdown;
+  while (remaining.length > 0) {
+    const removeStart = remaining.indexOf("<<<REMOVE>>>");
+    const addStart = remaining.indexOf("<<<ADD>>>");
+    
+    if (removeStart === -1 && addStart === -1) {
+      // No more markers
+      parts.push({ type: "normal", content: remaining });
+      break;
+    }
+    
+    const nextMarker = removeStart !== -1 && addStart !== -1
+      ? Math.min(removeStart, addStart)
+      : removeStart !== -1
+      ? removeStart
+      : addStart;
+    
+    if (nextMarker > 0) {
+      parts.push({ type: "normal", content: remaining.slice(0, nextMarker) });
+    }
+    
+    if (remaining.slice(nextMarker).startsWith("<<<REMOVE>>>")) {
+      const endIdx = remaining.indexOf("<<<END>>>", nextMarker);
+      if (endIdx === -1) {
+        parts.push({ type: "normal", content: remaining.slice(nextMarker) });
+        break;
+      }
+      const content = remaining.slice(nextMarker + 12, endIdx); // 12 = len("<<<REMOVE>>>")
+      parts.push({ type: "remove", content });
+      remaining = remaining.slice(endIdx + 9); // 9 = len("<<<END>>>")
+    } else {
+      const endIdx = remaining.indexOf("<<<END>>>", nextMarker);
+      if (endIdx === -1) {
+        parts.push({ type: "normal", content: remaining.slice(nextMarker) });
+        break;
+      }
+      const content = remaining.slice(nextMarker + 9, endIdx); // 9 = len("<<<ADD>>>")
+      parts.push({ type: "add", content });
+      remaining = remaining.slice(endIdx + 9);
+    }
+  }
+  
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.type === "normal") {
+          return <span key={i}>{part.content}</span>;
+        }
+        if (part.type === "remove") {
+          return (
+            <span key={i} className="preview-remove">
+              {part.content}
+            </span>
+          );
+        }
+        return (
+          <span key={i} className="preview-add">
+            {part.content}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
 function EditSuggestionCard({ comment }: { comment: Comment }) {
   const applyEdit = useEditorStore((s) => s.applyEdit);
   const rejectEdit = useEditorStore((s) => s.rejectEdit);
@@ -11,24 +81,14 @@ function EditSuggestionCard({ comment }: { comment: Comment }) {
   const edit = comment.editSuggestion;
   if (!edit) return null;
 
-  if (edit.status === "pending") {
+  if (edit.status === "previewing") {
     return (
       <div className="edit-suggestion">
         <div className="edit-suggestion-header">
-          <span className="edit-suggestion-icon">✏️</span>
-          <span className="edit-suggestion-title">Suggested Edit</span>
+          <span className="edit-suggestion-icon">👁️</span>
+          <span className="edit-suggestion-title">Previewing Edit</span>
         </div>
         <div className="edit-suggestion-reasoning">{edit.reasoning}</div>
-        <div className="edit-diff">
-          <div className="edit-diff-old">
-            <span className="edit-diff-label">-</span>
-            <span className="edit-diff-content">{edit.oldString}</span>
-          </div>
-          <div className="edit-diff-new">
-            <span className="edit-diff-label">+</span>
-            <span className="edit-diff-content">{edit.newString}</span>
-          </div>
-        </div>
         <div className="edit-actions">
           <button
             className="edit-btn edit-btn-accept"
@@ -67,7 +127,7 @@ function EditSuggestionCard({ comment }: { comment: Comment }) {
     return (
       <div className="edit-status edit-status-rejected">
         <span className="edit-status-icon">✗</span>
-        <span>Edit rejected</span>
+        <span>Edit rejected - changes reverted</span>
         <button
           className="edit-status-dismiss"
           onClick={() => dismissEdit(comment.id)}
@@ -88,10 +148,6 @@ function Toolbar() {
   );
   const showComments = useEditorStore((s) => s.showComments);
   const toggleComments = useEditorStore((s) => s.toggleComments);
-  const undo = useEditorStore((s) => s.undo);
-  const redo = useEditorStore((s) => s.redo);
-  const canUndo = useEditorStore((s) => s.canUndo());
-  const canRedo = useEditorStore((s) => s.canRedo());
 
   const charCount = activeDoc?.markdown.length ?? 0;
   const commentCount = activeDoc?.comments.length ?? 0;
@@ -111,29 +167,6 @@ function Toolbar() {
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
           </svg>
           <span>{commentCount}</span>
-        </button>
-        <div className="toolbar-divider" />
-        <button
-          className="toolbar-btn"
-          onClick={undo}
-          disabled={!canUndo}
-          title="Undo (Ctrl+Z)"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M3 7v6h6"></path>
-            <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path>
-          </svg>
-        </button>
-        <button
-          className="toolbar-btn"
-          onClick={redo}
-          disabled={!canRedo}
-          title="Redo (Ctrl+Shift+Z)"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 7v6h-6"></path>
-            <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"></path>
-          </svg>
         </button>
       </div>
     </div>
@@ -260,13 +293,15 @@ function EditorView() {
   const setPendingSelection = useEditorStore((s) => s.setPendingSelection);
   const addComment = useEditorStore((s) => s.addComment);
   const showComments = useEditorStore((s) => s.showComments);
-  const undo = useEditorStore((s) => s.undo);
-  const redo = useEditorStore((s) => s.redo);
 
   const markdown = activeDoc?.markdown ?? "";
   const comments = activeDoc?.comments ?? [];
+  
+  // Check if we're in preview mode
+  const isPreviewing = comments.some((c) => c.editSuggestion?.status === "previewing");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
   const [commentInput, setCommentInput] = useState("");
 
   // Line selection state
@@ -279,25 +314,25 @@ function EditorView() {
 
   // Measure line height on mount
   useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const style = getComputedStyle(textarea);
+    const el = isPreviewing ? previewRef.current : textareaRef.current;
+    if (!el) return;
+    const style = getComputedStyle(el);
     const fontSize = parseFloat(style.fontSize);
     const lh = parseFloat(style.lineHeight);
     setLineHeight(isNaN(lh) ? fontSize * 1.7 : lh);
     setPaddingTop(parseFloat(style.paddingTop) || 0);
-  }, [activeDocumentId]);
+  }, [activeDocumentId, isPreviewing]);
 
   const getLineFromY = useCallback(
     (clientY: number) => {
-      const textarea = textareaRef.current;
-      if (!textarea || lineHeight === 0) return 0;
-      const rect = textarea.getBoundingClientRect();
-      const y = clientY - rect.top + textarea.scrollTop - paddingTop;
+      const el = isPreviewing ? previewRef.current : textareaRef.current;
+      if (!el || lineHeight === 0) return 0;
+      const rect = el.getBoundingClientRect();
+      const y = clientY - rect.top + el.scrollTop - paddingTop;
       const totalLines = markdown.split("\n").length;
       return Math.max(0, Math.min(Math.floor(y / lineHeight), totalLines - 1));
     },
-    [lineHeight, paddingTop, markdown]
+    [lineHeight, paddingTop, markdown, isPreviewing]
   );
 
   const handleChange = useCallback(
@@ -314,18 +349,6 @@ function EditorView() {
         setPendingSelection(null);
         return;
       }
-      // Undo: Ctrl/Cmd+Z
-      if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
-        e.preventDefault();
-        undo();
-        return;
-      }
-      // Redo: Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y
-      if ((e.metaKey || e.ctrlKey) && (e.key === "z" && e.shiftKey || e.key === "y")) {
-        e.preventDefault();
-        redo();
-        return;
-      }
       if (e.key === "Tab") {
         e.preventDefault();
         const textarea = e.currentTarget;
@@ -338,11 +361,11 @@ function EditorView() {
         });
       }
     },
-    [setMarkdown, setPendingSelection, undo, redo]
+    [setMarkdown, setPendingSelection]
   );
 
   const handleMouseDown = useCallback(
-    (e: React.MouseEvent<HTMLTextAreaElement>) => {
+    (e: React.MouseEvent) => {
       // Only intercept left-click for line selection
       if (e.button !== 0) return;
 
@@ -365,7 +388,6 @@ function EditorView() {
 
       // Suppress native text selection
       e.preventDefault();
-      textareaRef.current?.focus();
     },
     [getLineFromY, markdown, setPendingSelection]
   );
@@ -398,9 +420,9 @@ function EditorView() {
   }, [getLineFromY, markdown, setPendingSelection, isDragging]);
 
   const handleScroll = useCallback(() => {
-    const textarea = textareaRef.current;
-    if (textarea) setScrollTop(textarea.scrollTop);
-  }, []);
+    const el = isPreviewing ? previewRef.current : textareaRef.current;
+    if (el) setScrollTop(el.scrollTop);
+  }, [isPreviewing]);
 
   const handleSubmitComment = useCallback(() => {
     if (!pendingSelection || !commentInput.trim() || !selectedLines) return;
@@ -460,19 +482,30 @@ function EditorView() {
               }}
             />
           )}
-          <textarea
-            key={activeDocumentId}
-            ref={textareaRef}
-            className={`editor-textarea${selectedLines ? " line-selecting" : ""}`}
-            value={markdown}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            onMouseDown={handleMouseDown}
-            onScroll={handleScroll}
-            spellCheck={false}
-            wrap="off"
-            placeholder="Type your markdown here..."
-          />
+          {isPreviewing ? (
+            <div
+              ref={previewRef}
+              className={`editor-preview${selectedLines ? " line-selecting" : ""}`}
+              onMouseDown={handleMouseDown}
+              onScroll={handleScroll}
+            >
+              <PreviewContent markdown={markdown} />
+            </div>
+          ) : (
+            <textarea
+              key={activeDocumentId}
+              ref={textareaRef}
+              className={`editor-textarea${selectedLines ? " line-selecting" : ""}`}
+              value={markdown}
+              onChange={handleChange}
+              onKeyDown={handleKeyDown}
+              onMouseDown={handleMouseDown}
+              onScroll={handleScroll}
+              spellCheck={false}
+              wrap="off"
+              placeholder="Type your markdown here..."
+            />
+          )}
           {pendingSelection && inputTop !== null && !isDragging && (
             <div className="comment-input-wrapper" style={{ top: inputTop }}>
               <div className="comment-input-row">
