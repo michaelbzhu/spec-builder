@@ -9,6 +9,7 @@
     "start": "NODE_ENV=production bun src/index.ts"
   },
   "dependencies": {
+    "diff": "^8.0.3",
     "marked": "^17.0.3",
     "openai": "^4.85.4",
     "react": "^19",

@@ -1,4 +1,10 @@
 import { create } from "zustand";
+import {
+  buildDiffPreview,
+  buildPreviewMarkdown,
+  replaceFirstExact,
+  type DiffPreview,
+} from "./diffPreview";
 
 export interface EditSuggestion {
   id: string;
@@ -7,6 +13,9 @@ export interface EditSuggestion {
   reasoning: string;
   status: "previewing" | "accepted" | "rejected";
   backupMarkdown: string;
+  newMarkdown: string;
+  previewMarkdown: string;
+  diffPreview: DiffPreview;
   createdAt: number;
 }
 
@@ -81,36 +90,6 @@ This is your default document. Start editing or create a new document from the s
   comments: [],
 };
 
-// Create a preview markdown that shows old text (red) and new text (green)
-function createPreviewMarkdown(
-  originalMarkdown: string,
-  oldString: string,
-  newString: string
-): string {
-  // We use special markers that the UI can interpret as highlights
-  // Format: <<<REMOVE>>>old text<<<END>>>text in between<<<ADD>>>new text<<<END>>>
-  const escapedOld = oldString.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const regex = new RegExp(escapedOld, "g");
-  
-  return originalMarkdown.replace(regex, (match) => {
-    return `<<<REMOVE>>>${match}<<<END>>><<<ADD>>>${newString}<<<END>>>`;
-  });
-}
-
-// Extract the actual content (new version) from preview markdown
-function extractNewVersion(previewMarkdown: string): string {
-  return previewMarkdown
-    .replace(/<<<REMOVE>>>[\s\S]*?<<<END>>>/g, "")
-    .replace(/<<<ADD>>>([\s\S]*?)<<<END>>>/g, "$1");
-}
-
-// Extract the backup content (old version) from preview markdown
-function extractOldVersion(previewMarkdown: string, oldString: string): string {
-  return previewMarkdown
-    .replace(/<<<ADD>>>[\s\S]*?<<<END>>>/g, "")
-    .replace(/<<<REMOVE>>>([\s\S]*?)<<<END>>>/g, "$1");
-}
-
 export const useEditorStore = create<EditorStore>((set, get) => ({
   view: "editor",
   generating: false,
@@ -164,8 +143,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     const comment = doc.comments.find((c) => c.id === commentId);
     if (!comment?.editSuggestion) return;
 
-    // Extract and apply the new version (remove markers, keep new content)
-    const newMarkdown = extractNewVersion(doc.markdown);
+    const newMarkdown = comment.editSuggestion.newMarkdown;
 
     set((state) => ({
       documents: state.documents.map((d) =>
@@ -312,30 +290,41 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
         
         // Check if there's a tool call (edit suggestion)
         let editSuggestion: EditSuggestion | undefined;
-        let previewMarkdown: string | undefined;
+        let infoMessage: string | null = null;
 
         if (data.toolCall && data.toolCall.name === "edit_document") {
           const args = data.toolCall.arguments;
           const doc = get().documents.find((d) => d.id === activeDocumentId);
-          
-          if (doc && doc.markdown.includes(args.oldString)) {
-            // Save backup and create preview markdown
-            const backupMarkdown = doc.markdown;
-            previewMarkdown = createPreviewMarkdown(
+
+          if (doc) {
+            const replacement = replaceFirstExact(
               doc.markdown,
-              args.oldString,
-              args.newString
+              String(args.oldString ?? ""),
+              String(args.newString ?? "")
             );
-            
-            editSuggestion = {
-              id: crypto.randomUUID(),
-              oldString: args.oldString,
-              newString: args.newString,
-              reasoning: args.reasoning,
-              status: "previewing",
-              backupMarkdown,
-              createdAt: Date.now(),
-            };
+
+            if (replacement.found) {
+              const backupMarkdown = doc.markdown;
+              const newMarkdown = replacement.result;
+              const diffPreview = buildDiffPreview(backupMarkdown, newMarkdown);
+              const previewMarkdown = buildPreviewMarkdown(diffPreview);
+
+              editSuggestion = {
+                id: crypto.randomUUID(),
+                oldString: String(args.oldString ?? ""),
+                newString: String(args.newString ?? ""),
+                reasoning: String(args.reasoning ?? ""),
+                status: "previewing",
+                backupMarkdown,
+                newMarkdown,
+                previewMarkdown,
+                diffPreview,
+                createdAt: Date.now(),
+              };
+            } else {
+              infoMessage =
+                "Could not preview this edit because the suggested original text was not found exactly.";
+            }
           }
         }
 
@@ -344,12 +333,25 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
             d.id === activeDocumentId
               ? {
                   ...d,
-                  markdown: previewMarkdown ?? d.markdown,
-                  title: previewMarkdown ? deriveTitle(extractNewVersion(previewMarkdown)) : d.title,
                   comments: d.comments.map((c) =>
-                    c.id === commentId
-                      ? { ...c, llmResponse: response, loading: false, editSuggestion }
-                      : c
+                    c.editSuggestion?.status === "previewing"
+                      ? {
+                          ...c,
+                          editSuggestion: {
+                            ...c.editSuggestion,
+                            status: "rejected",
+                          },
+                        }
+                      : c.id === commentId
+                        ? {
+                            ...c,
+                            llmResponse: infoMessage
+                              ? `${response}\n\n${infoMessage}`
+                              : response,
+                            loading: false,
+                            editSuggestion,
+                          }
+                        : c
                   ),
                 }
               : d

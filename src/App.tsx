@@ -1,83 +1,42 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { parsePreviewMarkdown } from "./diffPreview";
 import { useEditorStore, type Comment } from "./store";
 
 import "./index.css";
 
-// Parse preview markdown and render with highlights
-function PreviewContent({ markdown }: { markdown: string }) {
-  // Split by markers and render with appropriate styling
-  const parts: Array<{ type: "normal" | "remove" | "add"; content: string }> = [];
-  
-  let remaining = markdown;
-  while (remaining.length > 0) {
-    const removeStart = remaining.indexOf("<<<REMOVE>>>");
-    const addStart = remaining.indexOf("<<<ADD>>>");
-    
-    if (removeStart === -1 && addStart === -1) {
-      // No more markers
-      parts.push({ type: "normal", content: remaining });
-      break;
-    }
-    
-    const nextMarker = removeStart !== -1 && addStart !== -1
-      ? Math.min(removeStart, addStart)
-      : removeStart !== -1
-      ? removeStart
-      : addStart;
-    
-    if (nextMarker > 0) {
-      parts.push({ type: "normal", content: remaining.slice(0, nextMarker) });
-    }
-    
-    if (remaining.slice(nextMarker).startsWith("<<<REMOVE>>>")) {
-      const endIdx = remaining.indexOf("<<<END>>>", nextMarker);
-      if (endIdx === -1) {
-        parts.push({ type: "normal", content: remaining.slice(nextMarker) });
-        break;
-      }
-      const content = remaining.slice(nextMarker + 12, endIdx); // 12 = len("<<<REMOVE>>>")
-      parts.push({ type: "remove", content });
-      remaining = remaining.slice(endIdx + 9); // 9 = len("<<<END>>>")
-    } else {
-      const endIdx = remaining.indexOf("<<<END>>>", nextMarker);
-      if (endIdx === -1) {
-        parts.push({ type: "normal", content: remaining.slice(nextMarker) });
-        break;
-      }
-      const content = remaining.slice(nextMarker + 9, endIdx); // 9 = len("<<<ADD>>>")
-      parts.push({ type: "add", content });
-      remaining = remaining.slice(endIdx + 9);
-    }
-  }
-  
+function GithubDiffView({
+  previewMarkdown,
+}: {
+  previewMarkdown: string;
+}) {
+  const lines = parsePreviewMarkdown(previewMarkdown);
+
   return (
-    <>
-      {parts.map((part, i) => {
-        if (part.type === "normal") {
-          return <span key={i}>{part.content}</span>;
-        }
-        if (part.type === "remove") {
+    <div className="gh-diff" role="presentation" aria-label="Suggested changes">
+      <div className="gh-diff-hunk">
+        {lines.map((line, index) => {
+          const className =
+            line.kind === "del"
+              ? "gh-line gh-line-del"
+              : line.kind === "add"
+                ? "gh-line gh-line-add"
+                : "gh-line gh-line-context";
+
           return (
-            <span key={i} className="preview-remove">
-              {part.content}
-            </span>
+            <div key={index} className={className}>
+              <span className="gh-line-code">{line.text.length === 0 ? "\u00A0" : line.text}</span>
+            </div>
           );
-        }
-        return (
-          <span key={i} className="preview-add">
-            {part.content}
-          </span>
-        );
-      })}
-    </>
+        })}
+      </div>
+    </div>
   );
 }
-
 function EditSuggestionCard({ comment }: { comment: Comment }) {
   const applyEdit = useEditorStore((s) => s.applyEdit);
   const rejectEdit = useEditorStore((s) => s.rejectEdit);
   const dismissEdit = useEditorStore((s) => s.dismissEdit);
-  
+
   const edit = comment.editSuggestion;
   if (!edit) return null;
 
@@ -90,16 +49,10 @@ function EditSuggestionCard({ comment }: { comment: Comment }) {
         </div>
         <div className="edit-suggestion-reasoning">{edit.reasoning}</div>
         <div className="edit-actions">
-          <button
-            className="edit-btn edit-btn-accept"
-            onClick={() => applyEdit(comment.id)}
-          >
+          <button className="edit-btn edit-btn-accept" onClick={() => applyEdit(comment.id)}>
             Accept
           </button>
-          <button
-            className="edit-btn edit-btn-reject"
-            onClick={() => rejectEdit(comment.id)}
-          >
+          <button className="edit-btn edit-btn-reject" onClick={() => rejectEdit(comment.id)}>
             Reject
           </button>
         </div>
@@ -143,9 +96,7 @@ function EditSuggestionCard({ comment }: { comment: Comment }) {
 }
 
 function Toolbar() {
-  const activeDoc = useEditorStore((s) =>
-    s.documents.find((d) => d.id === s.activeDocumentId)
-  );
+  const activeDoc = useEditorStore((s) => s.documents.find((d) => d.id === s.activeDocumentId));
   const showComments = useEditorStore((s) => s.showComments);
   const toggleComments = useEditorStore((s) => s.toggleComments);
 
@@ -175,10 +126,7 @@ function Toolbar() {
 
 function CommentCard({ comment }: { comment: Comment }) {
   return (
-    <div
-      className="comment-card"
-      style={{ top: comment.topPosition }}
-    >
+    <div className="comment-card" style={{ top: comment.topPosition }}>
       <div className="comment-selected-text">"{comment.selectedText}"</div>
       <div className="comment-user">{comment.userComment}</div>
       {comment.loading ? (
@@ -285,9 +233,7 @@ function PromptView() {
 
 function EditorView() {
   const activeDocumentId = useEditorStore((s) => s.activeDocumentId);
-  const activeDoc = useEditorStore((s) =>
-    s.documents.find((d) => d.id === s.activeDocumentId)
-  );
+  const activeDoc = useEditorStore((s) => s.documents.find((d) => d.id === s.activeDocumentId));
   const setMarkdown = useEditorStore((s) => s.setMarkdown);
   const pendingSelection = useEditorStore((s) => s.pendingSelection);
   const setPendingSelection = useEditorStore((s) => s.setPendingSelection);
@@ -296,15 +242,15 @@ function EditorView() {
 
   const markdown = activeDoc?.markdown ?? "";
   const comments = activeDoc?.comments ?? [];
-  
-  // Check if we're in preview mode
-  const isPreviewing = comments.some((c) => c.editSuggestion?.status === "previewing");
+  const previewComment = comments.find(
+    (c) => c.editSuggestion?.status === "previewing" && c.editSuggestion.previewMarkdown
+  );
+  const previewMarkdown = previewComment?.editSuggestion?.previewMarkdown ?? "";
+  const isPreviewing = Boolean(previewMarkdown);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const previewRef = useRef<HTMLDivElement>(null);
   const [commentInput, setCommentInput] = useState("");
 
-  // Line selection state
   const [lineHeight, setLineHeight] = useState(0);
   const [paddingTop, setPaddingTop] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
@@ -312,27 +258,34 @@ function EditorView() {
   const [isDragging, setIsDragging] = useState(false);
   const anchorLineRef = useRef<number | null>(null);
 
-  // Measure line height on mount
   useEffect(() => {
-    const el = isPreviewing ? previewRef.current : textareaRef.current;
+    const el = textareaRef.current;
     if (!el) return;
     const style = getComputedStyle(el);
     const fontSize = parseFloat(style.fontSize);
     const lh = parseFloat(style.lineHeight);
     setLineHeight(isNaN(lh) ? fontSize * 1.7 : lh);
     setPaddingTop(parseFloat(style.paddingTop) || 0);
-  }, [activeDocumentId, isPreviewing]);
+  }, [activeDocumentId]);
+
+  useEffect(() => {
+    if (!isPreviewing) return;
+    setSelectedLines(null);
+    setPendingSelection(null);
+    setCommentInput("");
+    setIsDragging(false);
+  }, [isPreviewing, setPendingSelection]);
 
   const getLineFromY = useCallback(
     (clientY: number) => {
-      const el = isPreviewing ? previewRef.current : textareaRef.current;
+      const el = textareaRef.current;
       if (!el || lineHeight === 0) return 0;
       const rect = el.getBoundingClientRect();
       const y = clientY - rect.top + el.scrollTop - paddingTop;
       const totalLines = markdown.split("\n").length;
       return Math.max(0, Math.min(Math.floor(y / lineHeight), totalLines - 1));
     },
-    [lineHeight, paddingTop, markdown, isPreviewing]
+    [lineHeight, paddingTop, markdown]
   );
 
   const handleChange = useCallback(
@@ -366,10 +319,9 @@ function EditorView() {
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      // Only intercept left-click for line selection
+      if (isPreviewing) return;
       if (e.button !== 0) return;
 
-      // Clear selection if clicking without Cmd (Meta) key
       if (!e.metaKey) {
         setSelectedLines(null);
         setPendingSelection(null);
@@ -381,21 +333,17 @@ function EditorView() {
       setIsDragging(true);
       setSelectedLines({ start: line, end: line });
 
-      // Sync pending selection
       const lines = markdown.split("\n");
       const text = lines[line] ?? "";
       setPendingSelection({ text, startLine: line, endLine: line });
-
-      // Suppress native text selection
       e.preventDefault();
     },
-    [getLineFromY, markdown, setPendingSelection]
+    [getLineFromY, isPreviewing, markdown, setPendingSelection]
   );
 
-  // Global mousemove/mouseup for drag selection
   useEffect(() => {
     const handleGlobalMouseMove = (e: MouseEvent) => {
-      if (!isDragging || anchorLineRef.current === null) return;
+      if (isPreviewing || !isDragging || anchorLineRef.current === null) return;
       const line = getLineFromY(e.clientY);
       const anchor = anchorLineRef.current;
       const startLine = Math.min(anchor, line);
@@ -417,16 +365,16 @@ function EditorView() {
       window.removeEventListener("mousemove", handleGlobalMouseMove);
       window.removeEventListener("mouseup", handleGlobalMouseUp);
     };
-  }, [getLineFromY, markdown, setPendingSelection, isDragging]);
+  }, [getLineFromY, isDragging, isPreviewing, markdown, setPendingSelection]);
 
   const handleScroll = useCallback(() => {
-    const el = isPreviewing ? previewRef.current : textareaRef.current;
+    const el = textareaRef.current;
     if (el) setScrollTop(el.scrollTop);
-  }, [isPreviewing]);
+  }, []);
 
   const handleSubmitComment = useCallback(() => {
-    if (!pendingSelection || !commentInput.trim() || !selectedLines) return;
-    // Position the comment card at the vertical center of the selection
+    if (isPreviewing || !pendingSelection || !commentInput.trim() || !selectedLines) return;
+
     const centerLine = (selectedLines.start + selectedLines.end) / 2;
     const topPos = paddingTop + centerLine * lineHeight;
     addComment(
@@ -439,7 +387,16 @@ function EditorView() {
     setCommentInput("");
     setSelectedLines(null);
     setPendingSelection(null);
-  }, [pendingSelection, commentInput, selectedLines, lineHeight, paddingTop, addComment, setPendingSelection]);
+  }, [
+    addComment,
+    commentInput,
+    isPreviewing,
+    lineHeight,
+    paddingTop,
+    pendingSelection,
+    selectedLines,
+    setPendingSelection,
+  ]);
 
   const handleInputKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -451,23 +408,23 @@ function EditorView() {
         setCommentInput("");
       }
     },
-    [handleSubmitComment]
+    [handleSubmitComment, setPendingSelection]
   );
 
   if (!activeDoc) return null;
 
-  // Compute highlight overlay position
-  const highlightStyle = selectedLines && lineHeight > 0
-    ? {
-        top: paddingTop + selectedLines.start * lineHeight - scrollTop,
-        height: (selectedLines.end - selectedLines.start + 1) * lineHeight,
-      }
-    : null;
+  const highlightStyle =
+    !isPreviewing && selectedLines && lineHeight > 0
+      ? {
+          top: paddingTop + selectedLines.start * lineHeight - scrollTop,
+          height: (selectedLines.end - selectedLines.start + 1) * lineHeight,
+        }
+      : null;
 
-  // Compute the input position (bottom of selection, in viewport coords relative to wrapper)
-  const inputTop = selectedLines && lineHeight > 0
-    ? paddingTop + (selectedLines.end + 1) * lineHeight - scrollTop + 8
-    : null;
+  const inputTop =
+    !isPreviewing && selectedLines && lineHeight > 0
+      ? paddingTop + (selectedLines.end + 1) * lineHeight - scrollTop + 8
+      : null;
 
   return (
     <div className="editor-container">
@@ -483,13 +440,8 @@ function EditorView() {
             />
           )}
           {isPreviewing ? (
-            <div
-              ref={previewRef}
-              className={`editor-preview${selectedLines ? " line-selecting" : ""}`}
-              onMouseDown={handleMouseDown}
-              onScroll={handleScroll}
-            >
-              <PreviewContent markdown={markdown} />
+            <div className="editor-textarea editor-textarea--preview">
+              <GithubDiffView previewMarkdown={previewMarkdown} />
             </div>
           ) : (
             <textarea
@@ -506,7 +458,7 @@ function EditorView() {
               placeholder="Type your markdown here..."
             />
           )}
-          {pendingSelection && inputTop !== null && !isDragging && (
+          {!isPreviewing && pendingSelection && inputTop !== null && !isDragging && (
             <div className="comment-input-wrapper" style={{ top: inputTop }}>
               <div className="comment-input-row">
                 <input
@@ -548,9 +500,7 @@ export function App() {
   return (
     <div className="app-layout">
       <Sidebar />
-      <div className="main-content">
-        {view === "prompt" ? <PromptView /> : <EditorView />}
-      </div>
+      <div className="main-content">{view === "prompt" ? <PromptView /> : <EditorView />}</div>
     </div>
   );
 }
