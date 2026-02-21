@@ -1,8 +1,28 @@
 import { useCallback, useRef, useState } from "react";
-import { useEditorStore } from "./store";
-import { CommentsPanel } from "./CommentsPanel";
+import { useEditorStore, type Comment } from "./store";
 
 import "./index.css";
+
+function CommentCard({ comment }: { comment: Comment }) {
+  return (
+    <div
+      className="comment-card"
+      style={{ top: comment.topPosition }}
+    >
+      <div className="comment-selected-text">"{comment.selectedText}"</div>
+      <div className="comment-user">{comment.userComment}</div>
+      {comment.loading ? (
+        <div className="comment-loading">
+          <span className="loading-dot" />
+          <span className="loading-dot" />
+          <span className="loading-dot" />
+        </div>
+      ) : (
+        <div className="comment-llm">{comment.llmResponse}</div>
+      )}
+    </div>
+  );
+}
 
 export function App() {
   const markdown = useEditorStore((s) => s.markdown);
@@ -10,9 +30,9 @@ export function App() {
   const pendingSelection = useEditorStore((s) => s.pendingSelection);
   const setPendingSelection = useEditorStore((s) => s.setPendingSelection);
   const addComment = useEditorStore((s) => s.addComment);
+  const comments = useEditorStore((s) => s.comments);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const editorPanelRef = useRef<HTMLDivElement>(null);
   const [commentInput, setCommentInput] = useState("");
   const [showPopover, setShowPopover] = useState(false);
   const [buttonTop, setButtonTop] = useState<number | null>(null);
@@ -50,9 +70,8 @@ export function App() {
       if (start !== end) {
         const text = textarea.value.substring(start, end);
         setPendingSelection({ text, start, end });
-        // Position relative to the textarea element itself
         const textareaRect = textarea.getBoundingClientRect();
-        const relativeY = e.clientY - textareaRect.top;
+        const relativeY = e.clientY - textareaRect.top + textarea.scrollTop;
         setButtonTop(relativeY);
         setShowPopover(false);
       } else {
@@ -81,18 +100,19 @@ export function App() {
   }, []);
 
   const handleSubmitComment = useCallback(() => {
-    if (!pendingSelection || !commentInput.trim()) return;
+    if (!pendingSelection || !commentInput.trim() || buttonTop === null) return;
     addComment(
       pendingSelection.text,
       pendingSelection.start,
       pendingSelection.end,
-      commentInput.trim()
+      commentInput.trim(),
+      buttonTop
     );
     setCommentInput("");
     setShowPopover(false);
     setButtonTop(null);
     setPendingSelection(null);
-  }, [pendingSelection, commentInput, addComment, setPendingSelection]);
+  }, [pendingSelection, commentInput, buttonTop, addComment, setPendingSelection]);
 
   const handleInputKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -106,70 +126,77 @@ export function App() {
     [handleSubmitComment]
   );
 
+  const handleScroll = useCallback(() => {
+    // Close popover on scroll to avoid misalignment
+    if (showPopover) {
+      setShowPopover(false);
+    }
+  }, [showPopover]);
+
   return (
     <div className="editor-container">
       <header className="toolbar">
         <h1 className="toolbar-title">Markdown Editor</h1>
       </header>
 
-      <div className="panels">
-        <div className="panel editor-panel">
-          <div className="panel-header">Edit</div>
-          <div className="editor-textarea-wrapper" ref={editorPanelRef}>
-            <textarea
-              ref={textareaRef}
-              className="editor-textarea"
-              value={markdown}
-              onChange={handleChange}
-              onKeyDown={handleKeyDown}
-              onMouseUp={handleMouseUp}
-              onKeyUp={handleKeyUp}
-              spellCheck={false}
-              placeholder="Type your markdown here..."
-            />
-            {pendingSelection && buttonTop !== null && (
-              <div className="comment-trigger" style={{ top: buttonTop }}>
-                <button
-                  className="comment-trigger-btn"
-                  onClick={handleCommentClick}
-                  title="Add comment"
-                >
-                  +
-                </button>
-                {showPopover && (
-                  <div className="comment-popover">
-                    <div className="comment-popover-selection">
-                      "{pendingSelection.text.length > 60
-                        ? pendingSelection.text.slice(0, 60) + "..."
-                        : pendingSelection.text}"
-                    </div>
-                    <div className="comment-input-row">
-                      <input
-                        className="comment-input"
-                        type="text"
-                        placeholder="Add your comment..."
-                        value={commentInput}
-                        onChange={(e) => setCommentInput(e.target.value)}
-                        onKeyDown={handleInputKeyDown}
-                        autoFocus
-                      />
-                      <button
-                        className="comment-submit-btn"
-                        onClick={handleSubmitComment}
-                        disabled={!commentInput.trim()}
-                      >
-                        Send
-                      </button>
-                    </div>
+      <div className="editor-main">
+        <div className="editor-textarea-wrapper">
+          <textarea
+            ref={textareaRef}
+            className="editor-textarea"
+            value={markdown}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            onMouseUp={handleMouseUp}
+            onKeyUp={handleKeyUp}
+            onScroll={handleScroll}
+            spellCheck={false}
+            placeholder="Type your markdown here..."
+          />
+          {pendingSelection && buttonTop !== null && (
+            <div className="comment-trigger" style={{ top: buttonTop - (textareaRef.current?.scrollTop ?? 0) }}>
+              <button
+                className="comment-trigger-btn"
+                onClick={handleCommentClick}
+                title="Add comment"
+              >
+                +
+              </button>
+              {showPopover && (
+                <div className="comment-popover">
+                  <div className="comment-popover-selection">
+                    "{pendingSelection.text.length > 60
+                      ? pendingSelection.text.slice(0, 60) + "..."
+                      : pendingSelection.text}"
                   </div>
-                )}
-              </div>
-            )}
-          </div>
+                  <div className="comment-input-row">
+                    <input
+                      className="comment-input"
+                      type="text"
+                      placeholder="Add your comment..."
+                      value={commentInput}
+                      onChange={(e) => setCommentInput(e.target.value)}
+                      onKeyDown={handleInputKeyDown}
+                      autoFocus
+                    />
+                    <button
+                      className="comment-submit-btn"
+                      onClick={handleSubmitComment}
+                      disabled={!commentInput.trim()}
+                    >
+                      Send
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-        <div className="panel">
-          <div className="panel-header">Comments</div>
-          <CommentsPanel />
+
+        <div className="comments-margin">
+          {comments.map((c) => (
+            <CommentCard key={c.id} comment={c} />
+          ))}
         </div>
       </div>
     </div>

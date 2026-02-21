@@ -9,6 +9,7 @@ export interface Comment {
   llmResponse: string | null;
   loading: boolean;
   createdAt: number;
+  topPosition: number;
 }
 
 interface EditorStore {
@@ -19,7 +20,8 @@ interface EditorStore {
     selectedText: string,
     startOffset: number,
     endOffset: number,
-    userComment: string
+    userComment: string,
+    topPosition: number
   ) => void;
   pendingSelection: { text: string; start: number; end: number } | null;
   setPendingSelection: (
@@ -39,7 +41,7 @@ const MOCK_RESPONSES = [
 export const useEditorStore = create<EditorStore>((set, get) => ({
   markdown: `# Markdown Editor
 
-Welcome to the **Markdown Editor**! Start typing on the left to see comments on the right.
+Welcome to the **Markdown Editor**! Highlight text and add comments to get started.
 
 ## Features
 
@@ -86,7 +88,7 @@ Happy writing!
 
   comments: [],
 
-  addComment: (selectedText, startOffset, endOffset, userComment) => {
+  addComment: (selectedText, startOffset, endOffset, userComment, topPosition) => {
     const id = crypto.randomUUID();
     const comment: Comment = {
       id,
@@ -97,6 +99,7 @@ Happy writing!
       llmResponse: null,
       loading: true,
       createdAt: Date.now(),
+      topPosition,
     };
 
     set((state) => ({ comments: [comment, ...state.comments] }));

@@ -14,6 +14,7 @@
   --header-bg: #1f2335;
   --green: #9ece6a;
   --purple: #bb9af7;
+  --comments-width: 300px;
 }
 
 body {
@@ -52,39 +53,26 @@ body {
   letter-spacing: 0.02em;
 }
 
-.panels {
+/* Main editor area with margin for comments */
+.editor-main {
   display: flex;
   flex: 1;
   overflow: hidden;
+  position: relative;
 }
 
-.panel {
+.editor-textarea-wrapper {
+  position: relative;
   flex: 1;
   display: flex;
-  flex-direction: column;
   overflow: hidden;
-}
-
-.editor-panel {
-  border-right: 1px solid var(--border);
-}
-
-.panel-header {
-  padding: 0.4rem 1rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
 }
 
 .editor-textarea {
   flex: 1;
   width: 100%;
   padding: 1rem;
+  padding-right: 2rem;
   background: var(--bg);
   color: var(--text);
   border: none;
@@ -101,14 +89,21 @@ body {
   color: var(--text-muted);
 }
 
-/* Floating Comment Button */
-.editor-textarea-wrapper {
+/* Comments margin — Google Docs style */
+.comments-margin {
+  width: var(--comments-width);
+  flex-shrink: 0;
   position: relative;
-  flex: 1;
-  display: flex;
-  overflow: hidden;
+  overflow-y: auto;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
 }
 
+.comments-margin:empty {
+  display: none;
+}
+
+/* Floating Comment Button */
 .comment-trigger {
   position: absolute;
   right: 12px;
@@ -204,40 +199,29 @@ body {
   cursor: not-allowed;
 }
 
-/* Comments Panel */
-.comments-panel {
-  flex: 1;
-  padding: 1rem;
-  overflow-y: auto;
-  background: var(--bg);
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.comments-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  text-align: center;
-  padding: 2rem;
-}
-
+/* Comment cards in the margin */
 .comment-card {
+  position: absolute;
+  left: 0;
+  right: 0;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 0.75rem;
+  padding: 0.6rem;
+  margin: 0 0.5rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.4rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transition: box-shadow 0.15s;
+}
+
+.comment-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 .comment-selected-text {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   font-style: italic;
   border-left: 2px solid var(--accent);
@@ -245,32 +229,32 @@ body {
   line-height: 1.4;
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 
 .comment-user {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--text);
   background: rgba(122, 162, 247, 0.1);
   border-radius: 6px;
-  padding: 0.5rem 0.65rem;
+  padding: 0.4rem 0.5rem;
   line-height: 1.4;
 }
 
 .comment-llm {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--text);
   background: rgba(187, 154, 247, 0.1);
   border-radius: 6px;
-  padding: 0.5rem 0.65rem;
+  padding: 0.4rem 0.5rem;
   line-height: 1.4;
 }
 
 .comment-loading {
   display: flex;
   gap: 0.3rem;
-  padding: 0.5rem 0.65rem;
+  padding: 0.4rem 0.5rem;
 }
 
 .loading-dot {
@@ -296,32 +280,28 @@ body {
 
 /* Scrollbar styling */
 .editor-textarea::-webkit-scrollbar,
-.comments-panel::-webkit-scrollbar {
+.comments-margin::-webkit-scrollbar {
   width: 8px;
 }
 
 .editor-textarea::-webkit-scrollbar-track,
-.comments-panel::-webkit-scrollbar-track {
+.comments-margin::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .editor-textarea::-webkit-scrollbar-thumb,
-.comments-panel::-webkit-scrollbar-thumb {
+.comments-margin::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 4px;
 }
 
 .editor-textarea::-webkit-scrollbar-thumb:hover,
-.comments-panel::-webkit-scrollbar-thumb:hover {
+.comments-margin::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
 
 @media (max-width: 640px) {
-  .panels {
-    flex-direction: column;
-  }
-  .editor-panel {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
+  .comments-margin {
+    display: none;
   }
 }
