@@ -50,11 +50,26 @@ interface EditorStore {
   ) => void;
 }
 
+const defaultDoc: Document = {
+  id: "welcome",
+  title: "Welcome",
+  markdown: `# Welcome
+
+This is your default document. Start editing or create a new document from the sidebar.
+
+## Getting Started
+
+- Use **Cmd + Click** to select lines
+- Add comments to discuss sections
+- Create new documents with the + button`,
+  comments: [],
+};
+
 export const useEditorStore = create<EditorStore>((set, get) => ({
-  view: "prompt",
+  view: "editor",
   generating: false,
-  documents: [],
-  activeDocumentId: null,
+  documents: [defaultDoc],
+  activeDocumentId: "welcome",
 
   goToPrompt: () => set({ view: "prompt", pendingSelection: null }),
 
