@@ -29,15 +29,6 @@ interface EditorStore {
   ) => void;
 }
 
-const MOCK_RESPONSES = [
-  "That's an interesting point. Consider expanding on this idea with more specific examples.",
-  "This section could benefit from a clearer topic sentence to guide the reader.",
-  "Good use of formatting here. The structure makes the content easy to follow.",
-  "You might want to add a transition phrase to connect this with the previous section.",
-  "This is well-written. One suggestion: try making the language more concise.",
-  "Consider adding a code example here to illustrate the concept more clearly.",
-];
-
 export const useEditorStore = create<EditorStore>((set, get) => ({
   markdown: `# Markdown Editor
 
@@ -104,15 +95,29 @@ Happy writing!
 
     set((state) => ({ comments: [comment, ...state.comments] }));
 
-    setTimeout(() => {
-      const response =
-        MOCK_RESPONSES[Math.floor(Math.random() * MOCK_RESPONSES.length)];
-      set((state) => ({
-        comments: state.comments.map((c) =>
-          c.id === id ? { ...c, llmResponse: response, loading: false } : c
-        ),
-      }));
-    }, 1000);
+    fetch("/api/comment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ selectedText, userComment }),
+    })
+      .then((res) => res.json())
+      .then((data: any) => {
+        const response = data.response ?? data.error ?? "No response.";
+        set((state) => ({
+          comments: state.comments.map((c) =>
+            c.id === id ? { ...c, llmResponse: response, loading: false } : c
+          ),
+        }));
+      })
+      .catch((err) => {
+        set((state) => ({
+          comments: state.comments.map((c) =>
+            c.id === id
+              ? { ...c, llmResponse: "Error: " + err.message, loading: false }
+              : c
+          ),
+        }));
+      });
   },
 
   pendingSelection: null,

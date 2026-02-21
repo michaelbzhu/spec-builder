@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "marked": "^17.0.3",
+    "openai": "^6.22.0",
     "react": "^19",
     "react-dom": "^19",
     "zustand": "^5.0.11"
