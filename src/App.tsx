@@ -131,8 +131,8 @@ function EditorView() {
   const [paddingTop, setPaddingTop] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
   const [selectedLines, setSelectedLines] = useState<{ start: number; end: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const anchorLineRef = useRef<number | null>(null);
-  const isDraggingRef = useRef(false);
 
   // Measure line height on mount
   useEffect(() => {
@@ -200,7 +200,7 @@ function EditorView() {
 
       const line = getLineFromY(e.clientY);
       anchorLineRef.current = line;
-      isDraggingRef.current = true;
+      setIsDragging(true);
       setSelectedLines({ start: line, end: line });
 
       // Sync pending selection
@@ -218,7 +218,7 @@ function EditorView() {
   // Global mousemove/mouseup for drag selection
   useEffect(() => {
     const handleGlobalMouseMove = (e: MouseEvent) => {
-      if (!isDraggingRef.current || anchorLineRef.current === null) return;
+      if (!isDragging || anchorLineRef.current === null) return;
       const line = getLineFromY(e.clientY);
       const anchor = anchorLineRef.current;
       const startLine = Math.min(anchor, line);
@@ -231,9 +231,7 @@ function EditorView() {
     };
 
     const handleGlobalMouseUp = () => {
-      if (isDraggingRef.current) {
-        isDraggingRef.current = false;
-      }
+      setIsDragging(false);
     };
 
     window.addEventListener("mousemove", handleGlobalMouseMove);
@@ -242,7 +240,7 @@ function EditorView() {
       window.removeEventListener("mousemove", handleGlobalMouseMove);
       window.removeEventListener("mouseup", handleGlobalMouseUp);
     };
-  }, [getLineFromY, markdown, setPendingSelection]);
+  }, [getLineFromY, markdown, setPendingSelection, isDragging]);
 
   const handleScroll = useCallback(() => {
     const textarea = textareaRef.current;
@@ -320,7 +318,7 @@ function EditorView() {
             wrap="off"
             placeholder="Type your markdown here..."
           />
-          {pendingSelection && inputTop !== null && (
+          {pendingSelection && inputTop !== null && !isDragging && (
             <div className="comment-input-wrapper" style={{ top: inputTop }}>
               <div className="comment-input-row">
                 <input
