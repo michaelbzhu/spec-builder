@@ -3,8 +3,8 @@ import { create } from "zustand";
 export interface Comment {
   id: string;
   selectedText: string;
-  startOffset: number;
-  endOffset: number;
+  startLine: number;
+  endLine: number;
   userComment: string;
   llmResponse: string | null;
   loading: boolean;
@@ -36,17 +36,17 @@ interface EditorStore {
   setMarkdown: (md: string) => void;
   addComment: (
     selectedText: string,
-    startOffset: number,
-    endOffset: number,
+    startLine: number,
+    endLine: number,
     userComment: string,
     topPosition: number
   ) => void;
   switchDocument: (id: string) => void;
   deleteDocument: (id: string) => void;
   goToPrompt: () => void;
-  pendingSelection: { text: string; start: number; end: number } | null;
+  pendingSelection: { text: string; startLine: number; endLine: number } | null;
   setPendingSelection: (
-    sel: { text: string; start: number; end: number } | null
+    sel: { text: string; startLine: number; endLine: number } | null
   ) => void;
 }
 
@@ -129,7 +129,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       });
   },
 
-  addComment: (selectedText, startOffset, endOffset, userComment, topPosition) => {
+  addComment: (selectedText, startLine, endLine, userComment, topPosition) => {
     const { activeDocumentId } = get();
     if (!activeDocumentId) return;
 
@@ -137,8 +137,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     const comment: Comment = {
       id: commentId,
       selectedText,
-      startOffset,
-      endOffset,
+      startLine,
+      endLine,
       userComment,
       llmResponse: null,
       loading: true,

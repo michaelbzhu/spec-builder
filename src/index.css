@@ -5,25 +5,28 @@
 }
 
 :root {
-  --bg: #1a1b26;
-  --surface: #24283b;
-  --border: #414868;
-  --text: #c0caf5;
-  --text-muted: #565f89;
-  --accent: #7aa2f7;
-  --header-bg: #1f2335;
-  --green: #9ece6a;
-  --purple: #bb9af7;
+  --bg: #000000;
+  --surface: #111111;
+  --border: #333333;
+  --text: #ededed;
+  --text-muted: #888888;
+  --accent: #ffffff;
+  --header-bg: #0a0a0a;
+  --green: #50e3c2;
+  --purple: #7928ca;
+  --blue: #0070f3;
   --comments-width: 300px;
   --sidebar-width: 220px;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
   height: 100vh;
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
@@ -64,14 +67,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 0.75rem;
+  padding: 0.75rem;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .sidebar-label {
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
@@ -80,24 +83,24 @@ body {
 .sidebar-new-btn {
   width: 24px;
   height: 24px;
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
   border: 1px solid var(--border);
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 400;
   line-height: 1;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .sidebar-new-btn:hover {
-  background: var(--accent);
-  color: var(--bg);
-  border-color: var(--accent);
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--text-muted);
 }
 
 .sidebar-list {
@@ -113,6 +116,7 @@ body {
   cursor: pointer;
   transition: background 0.1s;
   gap: 0.25rem;
+  border-left: 2px solid transparent;
 }
 
 .sidebar-item:hover {
@@ -121,20 +125,20 @@ body {
 
 .sidebar-item--active {
   background: var(--surface);
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--text);
 }
 
 .sidebar-item-title {
   flex: 1;
   font-size: 0.8rem;
-  color: var(--text);
+  color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .sidebar-item--active .sidebar-item-title {
-  color: var(--accent);
+  color: var(--text);
 }
 
 .sidebar-item-delete {
@@ -157,8 +161,8 @@ body {
 }
 
 .sidebar-item-delete:hover {
-  background: rgba(255, 80, 80, 0.2);
-  color: #ff5050;
+  background: rgba(238, 0, 0, 0.15);
+  color: #ee0000;
 }
 
 /* Prompt view */
@@ -184,6 +188,7 @@ body {
   font-weight: 500;
   color: var(--text);
   text-align: center;
+  letter-spacing: -0.02em;
 }
 
 .prompt-input {
@@ -191,16 +196,17 @@ body {
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 6px;
   font-family: inherit;
-  font-size: 0.95rem;
-  line-height: 1.5;
+  font-size: 0.875rem;
+  line-height: 1.6;
   resize: none;
   outline: none;
+  transition: border-color 0.15s;
 }
 
 .prompt-input:focus {
-  border-color: var(--accent);
+  border-color: var(--text-muted);
 }
 
 .prompt-input::placeholder {
@@ -212,15 +218,15 @@ body {
   background: var(--accent);
   color: var(--bg);
   border: none;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 600;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: background 0.15s;
 }
 
 .prompt-submit:hover:not(:disabled) {
-  opacity: 0.9;
+  background: #ccc;
 }
 
 .prompt-submit:disabled {
@@ -233,22 +239,6 @@ body {
   flex-direction: column;
   flex: 1;
   height: 100%;
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  padding: 0.5rem 1rem;
-  background: var(--header-bg);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.toolbar-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--accent);
-  letter-spacing: 0.02em;
 }
 
 /* Main editor area with margin for comments */
@@ -264,30 +254,54 @@ body {
   flex: 1;
   display: flex;
   overflow: hidden;
+  background: var(--bg);
+}
+
+.line-highlight-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.07);
+  border-left: 3px solid var(--blue);
+}
+
+.editor-textarea.line-selecting {
+  cursor: default;
+}
+
+.editor-textarea.line-selecting::selection {
+  background: transparent;
 }
 
 .editor-textarea {
   flex: 1;
   width: 100%;
-  padding: 1rem;
+  padding: 1.25rem;
   padding-right: 2rem;
-  background: var(--bg);
+  background: transparent;
   color: var(--text);
   border: none;
   outline: none;
   resize: none;
-  font-family: "SF Mono", "Fira Code", "JetBrains Mono", Menlo, monospace;
-  font-size: 0.875rem;
-  line-height: 1.6;
+  font-family: "Geist Mono", "SF Mono", "Fira Code", Menlo, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.7;
   tab-size: 2;
   overflow-y: auto;
+  letter-spacing: 0.01em;
+  position: relative;
+  z-index: 2;
+  white-space: pre;
+  overflow-x: auto;
 }
 
 .editor-textarea::placeholder {
   color: var(--text-muted);
 }
 
-/* Comments margin — Google Docs style */
+/* Comments margin */
 .comments-margin {
   width: var(--comments-width);
   flex-shrink: 0;
@@ -313,31 +327,31 @@ body {
 }
 
 .comment-trigger-btn {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background: var(--accent);
   color: var(--bg);
-  border: 2px solid var(--surface);
-  font-size: 1rem;
-  font-weight: 700;
+  border: none;
+  font-size: 0.875rem;
+  font-weight: 500;
   line-height: 1;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  transition: transform 0.15s, opacity 0.15s;
 }
 
 .comment-trigger-btn:hover {
-  transform: scale(1.15);
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.4);
+  transform: scale(1.1);
+  opacity: 0.9;
 }
 
 .comment-popover {
   position: absolute;
-  right: 36px;
+  right: 34px;
   top: 0;
   transform: translateY(-50%);
   background: var(--surface);
@@ -345,7 +359,7 @@ body {
   border-radius: 8px;
   padding: 0.6rem;
   width: 300px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -367,29 +381,36 @@ body {
 
 .comment-input {
   flex: 1;
-  padding: 0.3rem 0.6rem;
+  padding: 0.35rem 0.6rem;
   background: var(--bg);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 0.8rem;
+  font-family: inherit;
   outline: none;
+  transition: border-color 0.15s;
 }
 
 .comment-input:focus {
-  border-color: var(--accent);
+  border-color: var(--text-muted);
 }
 
 .comment-submit-btn {
-  padding: 0.3rem 0.75rem;
+  padding: 0.35rem 0.75rem;
   background: var(--accent);
   color: var(--bg);
   border: none;
   border-radius: 4px;
   font-size: 0.8rem;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.comment-submit-btn:hover {
+  background: #ccc;
 }
 
 .comment-submit-btn:disabled {
@@ -404,25 +425,24 @@ body {
   right: 0;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 0.6rem;
   margin: 0 0.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  transition: box-shadow 0.15s;
+  transition: border-color 0.15s;
 }
 
 .comment-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  border-color: var(--text-muted);
 }
 
 .comment-selected-text {
   font-size: 0.75rem;
   color: var(--text-muted);
   font-style: italic;
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--text-muted);
   padding-left: 0.5rem;
   line-height: 1.4;
   overflow: hidden;
@@ -434,17 +454,17 @@ body {
 .comment-user {
   font-size: 0.8rem;
   color: var(--text);
-  background: rgba(122, 162, 247, 0.1);
-  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
   padding: 0.4rem 0.5rem;
   line-height: 1.4;
 }
 
 .comment-llm {
   font-size: 0.8rem;
-  color: var(--text);
-  background: rgba(187, 154, 247, 0.1);
-  border-radius: 6px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
   padding: 0.4rem 0.5rem;
   line-height: 1.4;
 }
@@ -456,8 +476,8 @@ body {
 }
 
 .loading-dot {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background: var(--text-muted);
   animation: pulse 1.2s ease-in-out infinite;
@@ -480,7 +500,7 @@ body {
 .editor-textarea::-webkit-scrollbar,
 .comments-margin::-webkit-scrollbar,
 .sidebar-list::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 .editor-textarea::-webkit-scrollbar-track,
@@ -493,7 +513,7 @@ body {
 .comments-margin::-webkit-scrollbar-thumb,
 .sidebar-list::-webkit-scrollbar-thumb {
   background: var(--border);
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 .editor-textarea::-webkit-scrollbar-thumb:hover,

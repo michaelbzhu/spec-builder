@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditorStore, type Comment } from "./store";
 
 import "./index.css";
@@ -126,7 +126,37 @@ function EditorView() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [commentInput, setCommentInput] = useState("");
   const [showPopover, setShowPopover] = useState(false);
-  const [buttonTop, setButtonTop] = useState<number | null>(null);
+
+  // Line selection state
+  const [lineHeight, setLineHeight] = useState(0);
+  const [paddingTop, setPaddingTop] = useState(0);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [selectedLines, setSelectedLines] = useState<{ start: number; end: number } | null>(null);
+  const anchorLineRef = useRef<number | null>(null);
+  const isDraggingRef = useRef(false);
+
+  // Measure line height on mount
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const style = getComputedStyle(textarea);
+    const fontSize = parseFloat(style.fontSize);
+    const lh = parseFloat(style.lineHeight);
+    setLineHeight(isNaN(lh) ? fontSize * 1.7 : lh);
+    setPaddingTop(parseFloat(style.paddingTop) || 0);
+  }, [activeDocumentId]);
+
+  const getLineFromY = useCallback(
+    (clientY: number) => {
+      const textarea = textareaRef.current;
+      if (!textarea || lineHeight === 0) return 0;
+      const rect = textarea.getBoundingClientRect();
+      const y = clientY - rect.top + textarea.scrollTop - paddingTop;
+      const totalLines = markdown.split("\n").length;
+      return Math.max(0, Math.min(Math.floor(y / lineHeight), totalLines - 1));
+    },
+    [lineHeight, paddingTop, markdown]
+  );
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -137,6 +167,12 @@ function EditorView() {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Escape") {
+        setSelectedLines(null);
+        setPendingSelection(null);
+        setShowPopover(false);
+        return;
+      }
       if (e.key === "Tab") {
         e.preventDefault();
         const textarea = e.currentTarget;
@@ -149,61 +185,89 @@ function EditorView() {
         });
       }
     },
-    [setMarkdown]
+    [setMarkdown, setPendingSelection]
   );
 
-  const handleMouseUp = useCallback(
+  const handleMouseDown = useCallback(
     (e: React.MouseEvent<HTMLTextAreaElement>) => {
-      const textarea = textareaRef.current;
-      if (!textarea) return;
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      if (start !== end) {
-        const text = textarea.value.substring(start, end);
-        setPendingSelection({ text, start, end });
-        const textareaRect = textarea.getBoundingClientRect();
-        const relativeY = e.clientY - textareaRect.top + textarea.scrollTop;
-        setButtonTop(relativeY);
-        setShowPopover(false);
-      } else {
-        setPendingSelection(null);
-        setShowPopover(false);
-        setButtonTop(null);
-      }
+      // Only intercept left-click for line selection
+      if (e.button !== 0) return;
+      // Allow double/triple click for native word/line selection behavior
+      if (e.detail > 1) return;
+
+      const line = getLineFromY(e.clientY);
+      anchorLineRef.current = line;
+      isDraggingRef.current = true;
+      setSelectedLines({ start: line, end: line });
+      setShowPopover(false);
+
+      // Sync pending selection
+      const lines = markdown.split("\n");
+      const text = lines[line] ?? "";
+      setPendingSelection({ text, startLine: line, endLine: line });
+
+      // Suppress native text selection
+      e.preventDefault();
+      textareaRef.current?.focus();
     },
-    [setPendingSelection]
+    [getLineFromY, markdown, setPendingSelection]
   );
 
-  const handleKeyUp = useCallback(() => {
+  // Global mousemove/mouseup for drag selection
+  useEffect(() => {
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current || anchorLineRef.current === null) return;
+      const line = getLineFromY(e.clientY);
+      const anchor = anchorLineRef.current;
+      const startLine = Math.min(anchor, line);
+      const endLine = Math.max(anchor, line);
+      setSelectedLines({ start: startLine, end: endLine });
+
+      const lines = markdown.split("\n");
+      const text = lines.slice(startLine, endLine + 1).join("\n");
+      setPendingSelection({ text, startLine, endLine });
+    };
+
+    const handleGlobalMouseUp = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+      }
+    };
+
+    window.addEventListener("mousemove", handleGlobalMouseMove);
+    window.addEventListener("mouseup", handleGlobalMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleGlobalMouseMove);
+      window.removeEventListener("mouseup", handleGlobalMouseUp);
+    };
+  }, [getLineFromY, markdown, setPendingSelection]);
+
+  const handleScroll = useCallback(() => {
     const textarea = textareaRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    if (start === end) {
-      setPendingSelection(null);
-      setShowPopover(false);
-      setButtonTop(null);
-    }
-  }, [setPendingSelection]);
+    if (textarea) setScrollTop(textarea.scrollTop);
+  }, []);
 
   const handleCommentClick = useCallback(() => {
     setShowPopover(true);
   }, []);
 
   const handleSubmitComment = useCallback(() => {
-    if (!pendingSelection || !commentInput.trim() || buttonTop === null) return;
+    if (!pendingSelection || !commentInput.trim() || !selectedLines) return;
+    // Position the comment card at the vertical center of the selection
+    const centerLine = (selectedLines.start + selectedLines.end) / 2;
+    const topPos = paddingTop + centerLine * lineHeight;
     addComment(
       pendingSelection.text,
-      pendingSelection.start,
-      pendingSelection.end,
+      pendingSelection.startLine,
+      pendingSelection.endLine,
       commentInput.trim(),
-      buttonTop
+      topPos
     );
     setCommentInput("");
     setShowPopover(false);
-    setButtonTop(null);
+    setSelectedLines(null);
     setPendingSelection(null);
-  }, [pendingSelection, commentInput, buttonTop, addComment, setPendingSelection]);
+  }, [pendingSelection, commentInput, selectedLines, lineHeight, paddingTop, addComment, setPendingSelection]);
 
   const handleInputKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -217,37 +281,49 @@ function EditorView() {
     [handleSubmitComment]
   );
 
-  const handleScroll = useCallback(() => {
-    if (showPopover) {
-      setShowPopover(false);
-    }
-  }, [showPopover]);
-
   if (!activeDoc) return null;
+
+  // Compute highlight overlay position
+  const highlightStyle = selectedLines && lineHeight > 0
+    ? {
+        top: paddingTop + selectedLines.start * lineHeight - scrollTop,
+        height: (selectedLines.end - selectedLines.start + 1) * lineHeight,
+      }
+    : null;
+
+  // Compute the button position (vertical center of selection, in viewport coords relative to wrapper)
+  const buttonTop = selectedLines && lineHeight > 0
+    ? paddingTop + ((selectedLines.start + selectedLines.end) / 2) * lineHeight - scrollTop + lineHeight / 2
+    : null;
 
   return (
     <div className="editor-container">
-      <header className="toolbar">
-        <h1 className="toolbar-title">Markdown Editor</h1>
-      </header>
-
       <div className="editor-main">
         <div className="editor-textarea-wrapper">
+          {highlightStyle && (
+            <div
+              className="line-highlight-overlay"
+              style={{
+                top: highlightStyle.top,
+                height: highlightStyle.height,
+              }}
+            />
+          )}
           <textarea
             key={activeDocumentId}
             ref={textareaRef}
-            className="editor-textarea"
+            className={`editor-textarea${selectedLines ? " line-selecting" : ""}`}
             value={markdown}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
-            onMouseUp={handleMouseUp}
-            onKeyUp={handleKeyUp}
+            onMouseDown={handleMouseDown}
             onScroll={handleScroll}
             spellCheck={false}
+            wrap="off"
             placeholder="Type your markdown here..."
           />
           {pendingSelection && buttonTop !== null && (
-            <div className="comment-trigger" style={{ top: buttonTop - (textareaRef.current?.scrollTop ?? 0) }}>
+            <div className="comment-trigger" style={{ top: buttonTop }}>
               <button
                 className="comment-trigger-btn"
                 onClick={handleCommentClick}
