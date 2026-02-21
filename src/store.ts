@@ -1,5 +1,14 @@
 import { create } from "zustand";
 
+export interface EditSuggestion {
+  id: string;
+  oldString: string;
+  newString: string;
+  reasoning: string;
+  status: "pending" | "accepted" | "rejected";
+  createdAt: number;
+}
+
 export interface Comment {
   id: string;
   selectedText: string;
@@ -10,6 +19,7 @@ export interface Comment {
   loading: boolean;
   createdAt: number;
   topPosition: number;
+  editSuggestion?: EditSuggestion;
 }
 
 export interface Document {
@@ -57,6 +67,9 @@ interface EditorStore {
   redo: () => void;
   canUndo: () => boolean;
   canRedo: () => boolean;
+  applyEdit: (commentId: string) => void;
+  rejectEdit: (commentId: string) => void;
+  dismissEdit: (commentId: string) => void;
   pendingSelection: { text: string; startLine: number; endLine: number } | null;
   setPendingSelection: (
     sel: { text: string; startLine: number; endLine: number } | null
@@ -184,6 +197,109 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     return history[historyIndex + 1]?.documentId === activeDocumentId;
   },
 
+  applyEdit: (commentId: string) => {
+    const { activeDocumentId } = get();
+    if (!activeDocumentId) return;
+
+    const doc = get().documents.find((d) => d.id === activeDocumentId);
+    if (!doc) return;
+
+    const comment = doc.comments.find((c) => c.id === commentId);
+    if (!comment?.editSuggestion) return;
+
+    const { oldString, newString } = comment.editSuggestion;
+
+    // Check if oldString exists in the document
+    if (!doc.markdown.includes(oldString)) {
+      console.error("Old string not found in document");
+      // Mark as rejected since we can't apply it
+      set((state) => ({
+        documents: state.documents.map((d) =>
+          d.id === activeDocumentId
+            ? {
+                ...d,
+                comments: d.comments.map((c) =>
+                  c.id === commentId
+                    ? { ...c, editSuggestion: { ...c.editSuggestion!, status: "rejected" } }
+                    : c
+                ),
+              }
+            : d
+        ),
+      }));
+      return;
+    }
+
+    // Save current state to history before applying edit
+    const newHistory = get().history.slice(0, get().historyIndex + 1);
+    newHistory.push({ documentId: activeDocumentId, markdown: doc.markdown });
+    if (newHistory.length > 50) {
+      newHistory.shift();
+    }
+
+    // Perform the replacement
+    const newMarkdown = doc.markdown.replace(oldString, newString);
+
+    set((state) => ({
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      documents: state.documents.map((d) =>
+        d.id === activeDocumentId
+          ? {
+              ...d,
+              markdown: newMarkdown,
+              title: deriveTitle(newMarkdown),
+              comments: d.comments.map((c) =>
+                c.id === commentId
+                  ? { ...c, editSuggestion: { ...c.editSuggestion!, status: "accepted" } }
+                  : c
+              ),
+            }
+          : d
+      ),
+    }));
+  },
+
+  rejectEdit: (commentId: string) => {
+    const { activeDocumentId } = get();
+    if (!activeDocumentId) return;
+
+    set((state) => ({
+      documents: state.documents.map((d) =>
+        d.id === activeDocumentId
+          ? {
+              ...d,
+              comments: d.comments.map((c) =>
+                c.id === commentId
+                  ? { ...c, editSuggestion: { ...c.editSuggestion!, status: "rejected" } }
+                  : c
+              ),
+            }
+          : d
+      ),
+    }));
+  },
+
+  dismissEdit: (commentId: string) => {
+    const { activeDocumentId } = get();
+    if (!activeDocumentId) return;
+
+    set((state) => ({
+      documents: state.documents.map((d) =>
+        d.id === activeDocumentId
+          ? {
+              ...d,
+              comments: d.comments.map((c) =>
+                c.id === commentId
+                  ? { ...c, editSuggestion: undefined }
+                  : c
+              ),
+            }
+          : d
+      ),
+    }));
+  },
+
   generateSpec: (prompt: string) => {
     set({ generating: true });
     fetch("/api/generate-spec", {
@@ -257,6 +373,21 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       .then((res) => res.json())
       .then((data: any) => {
         const response = data.response ?? data.error ?? "No response.";
+        
+        // Check if there's a tool call (edit suggestion)
+        let editSuggestion: EditSuggestion | undefined;
+        if (data.toolCall && data.toolCall.name === "edit_document") {
+          const args = data.toolCall.arguments;
+          editSuggestion = {
+            id: crypto.randomUUID(),
+            oldString: args.oldString,
+            newString: args.newString,
+            reasoning: args.reasoning,
+            status: "pending",
+            createdAt: Date.now(),
+          };
+        }
+
         set((state) => ({
           documents: state.documents.map((d) =>
             d.id === activeDocumentId
@@ -264,7 +395,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
                   ...d,
                   comments: d.comments.map((c) =>
                     c.id === commentId
-                      ? { ...c, llmResponse: response, loading: false }
+                      ? { ...c, llmResponse: response, loading: false, editSuggestion }
                       : c
                   ),
                 }

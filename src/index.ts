@@ -7,6 +7,33 @@ const openai = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
+// Define the edit_document tool for LLM function calling
+const editTool = {
+  type: "function" as const,
+  function: {
+    name: "edit_document",
+    description: "Suggest an edit to the document by replacing text. Use this when the user's comment suggests a specific change to the document that can be accomplished by finding and replacing text.",
+    parameters: {
+      type: "object",
+      properties: {
+        oldString: {
+          type: "string",
+          description: "The exact text to find and replace (must match exactly in the document)"
+        },
+        newString: {
+          type: "string",
+          description: "The replacement text"
+        },
+        reasoning: {
+          type: "string",
+          description: "Brief explanation of why this edit is suggested and how it addresses the user's comment"
+        }
+      },
+      required: ["oldString", "newString", "reasoning"]
+    }
+  }
+};
+
 const server = serve({
   port: Number(process.env.PORT) || 3000,
   routes: {
@@ -49,20 +76,39 @@ const server = serve({
 
           const completion = await openai.chat.completions.create({
             model: "openai/gpt-5.2",
-            max_tokens: 1024,
+            max_tokens: 2048,
             messages: [
               {
                 role: "system",
-                content: "You are a helpful writing assistant. The user has highlighted a passage of text and left a comment. Provide a brief, constructive response (1-3 sentences) addressing their comment in the context of the selected text.",
+                content: "You are a helpful writing assistant. The user has highlighted a passage of text and left a comment. Provide a brief, constructive response addressing their comment. If the user is asking for a specific change that can be made to the document, use the edit_document tool to suggest the exact change.",
               },
               {
                 role: "user",
                 content: `Selected text: "${selectedText}"\n\nComment: ${userComment}`,
               },
             ],
+            tools: [editTool],
+            tool_choice: "auto",
           });
 
-          const response = completion.choices[0]?.message?.content ?? "No response generated.";
+          const message = completion.choices[0]?.message;
+          
+          // Check if the model used a tool
+          if (message?.tool_calls && message.tool_calls.length > 0) {
+            const toolCall = message.tool_calls[0];
+            const args = JSON.parse(toolCall.function.arguments);
+            
+            return Response.json({
+              response: message.content || "I've suggested an edit to the document based on your comment.",
+              toolCall: {
+                name: toolCall.function.name,
+                arguments: args
+              }
+            });
+          }
+
+          // Regular text response
+          const response = message?.content ?? "No response generated.";
           return Response.json({ response });
         } catch (err: any) {
           console.error("OpenRouter error:", err);

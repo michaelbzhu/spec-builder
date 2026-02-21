@@ -3,6 +3,85 @@ import { useEditorStore, type Comment } from "./store";
 
 import "./index.css";
 
+function EditSuggestionCard({ comment }: { comment: Comment }) {
+  const applyEdit = useEditorStore((s) => s.applyEdit);
+  const rejectEdit = useEditorStore((s) => s.rejectEdit);
+  const dismissEdit = useEditorStore((s) => s.dismissEdit);
+  
+  const edit = comment.editSuggestion;
+  if (!edit) return null;
+
+  if (edit.status === "pending") {
+    return (
+      <div className="edit-suggestion">
+        <div className="edit-suggestion-header">
+          <span className="edit-suggestion-icon">✏️</span>
+          <span className="edit-suggestion-title">Suggested Edit</span>
+        </div>
+        <div className="edit-suggestion-reasoning">{edit.reasoning}</div>
+        <div className="edit-diff">
+          <div className="edit-diff-old">
+            <span className="edit-diff-label">-</span>
+            <span className="edit-diff-content">{edit.oldString}</span>
+          </div>
+          <div className="edit-diff-new">
+            <span className="edit-diff-label">+</span>
+            <span className="edit-diff-content">{edit.newString}</span>
+          </div>
+        </div>
+        <div className="edit-actions">
+          <button
+            className="edit-btn edit-btn-accept"
+            onClick={() => applyEdit(comment.id)}
+          >
+            Accept
+          </button>
+          <button
+            className="edit-btn edit-btn-reject"
+            onClick={() => rejectEdit(comment.id)}
+          >
+            Reject
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (edit.status === "accepted") {
+    return (
+      <div className="edit-status edit-status-accepted">
+        <span className="edit-status-icon">✓</span>
+        <span>Edit applied</span>
+        <button
+          className="edit-status-dismiss"
+          onClick={() => dismissEdit(comment.id)}
+          title="Dismiss"
+        >
+          ×
+        </button>
+      </div>
+    );
+  }
+
+  if (edit.status === "rejected") {
+    return (
+      <div className="edit-status edit-status-rejected">
+        <span className="edit-status-icon">✗</span>
+        <span>Edit rejected</span>
+        <button
+          className="edit-status-dismiss"
+          onClick={() => dismissEdit(comment.id)}
+          title="Dismiss"
+        >
+          ×
+        </button>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 function Toolbar() {
   const activeDoc = useEditorStore((s) =>
     s.documents.find((d) => d.id === s.activeDocumentId)
@@ -76,7 +155,10 @@ function CommentCard({ comment }: { comment: Comment }) {
           <span className="loading-dot" />
         </div>
       ) : (
-        <div className="comment-llm">{comment.llmResponse}</div>
+        <>
+          <div className="comment-llm">{comment.llmResponse}</div>
+          {comment.editSuggestion && <EditSuggestionCard comment={comment} />}
+        </>
       )}
     </div>
   );
