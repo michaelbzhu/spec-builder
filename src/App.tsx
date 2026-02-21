@@ -24,6 +24,46 @@ function CommentCard({ comment }: { comment: Comment }) {
   );
 }
 
+function Sidebar() {
+  const documents = useEditorStore((s) => s.documents);
+  const activeDocumentId = useEditorStore((s) => s.activeDocumentId);
+  const switchDocument = useEditorStore((s) => s.switchDocument);
+  const deleteDocument = useEditorStore((s) => s.deleteDocument);
+  const goToPrompt = useEditorStore((s) => s.goToPrompt);
+
+  return (
+    <div className="sidebar">
+      <div className="sidebar-header">
+        <span className="sidebar-label">Documents</span>
+        <button className="sidebar-new-btn" onClick={goToPrompt} title="New document">
+          +
+        </button>
+      </div>
+      <div className="sidebar-list">
+        {documents.map((doc) => (
+          <div
+            key={doc.id}
+            className={`sidebar-item ${doc.id === activeDocumentId ? "sidebar-item--active" : ""}`}
+            onClick={() => switchDocument(doc.id)}
+          >
+            <span className="sidebar-item-title">{doc.title}</span>
+            <button
+              className="sidebar-item-delete"
+              onClick={(e) => {
+                e.stopPropagation();
+                deleteDocument(doc.id);
+              }}
+              title="Delete document"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PromptView() {
   const [input, setInput] = useState("");
   const generateSpec = useEditorStore((s) => s.generateSpec);
@@ -71,12 +111,17 @@ function PromptView() {
 }
 
 function EditorView() {
-  const markdown = useEditorStore((s) => s.markdown);
+  const activeDocumentId = useEditorStore((s) => s.activeDocumentId);
+  const activeDoc = useEditorStore((s) =>
+    s.documents.find((d) => d.id === s.activeDocumentId)
+  );
   const setMarkdown = useEditorStore((s) => s.setMarkdown);
   const pendingSelection = useEditorStore((s) => s.pendingSelection);
   const setPendingSelection = useEditorStore((s) => s.setPendingSelection);
   const addComment = useEditorStore((s) => s.addComment);
-  const comments = useEditorStore((s) => s.comments);
+
+  const markdown = activeDoc?.markdown ?? "";
+  const comments = activeDoc?.comments ?? [];
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [commentInput, setCommentInput] = useState("");
@@ -178,6 +223,8 @@ function EditorView() {
     }
   }, [showPopover]);
 
+  if (!activeDoc) return null;
+
   return (
     <div className="editor-container">
       <header className="toolbar">
@@ -187,6 +234,7 @@ function EditorView() {
       <div className="editor-main">
         <div className="editor-textarea-wrapper">
           <textarea
+            key={activeDocumentId}
             ref={textareaRef}
             className="editor-textarea"
             value={markdown}
@@ -250,7 +298,14 @@ function EditorView() {
 
 export function App() {
   const view = useEditorStore((s) => s.view);
-  return view === "prompt" ? <PromptView /> : <EditorView />;
+  return (
+    <div className="app-layout">
+      <Sidebar />
+      <div className="main-content">
+        {view === "prompt" ? <PromptView /> : <EditorView />}
+      </div>
+    </div>
+  );
 }
 
 export default App;

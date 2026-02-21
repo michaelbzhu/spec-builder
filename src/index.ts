@@ -5,6 +5,7 @@ import index from "./index.html";
 const anthropic = new Anthropic();
 
 const server = serve({
+  port: Number(process.env.PORT) || 3000,
   routes: {
     "/*": index,
 
