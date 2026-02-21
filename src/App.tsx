@@ -190,10 +190,15 @@ function EditorView() {
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent<HTMLTextAreaElement>) => {
-      // Only enter line selection mode when Cmd (Meta) is held
-      if (!e.metaKey) return;
       // Only intercept left-click for line selection
       if (e.button !== 0) return;
+
+      // Clear selection if clicking without Cmd (Meta) key
+      if (!e.metaKey) {
+        setSelectedLines(null);
+        setPendingSelection(null);
+        return;
+      }
 
       const line = getLineFromY(e.clientY);
       anchorLineRef.current = line;
