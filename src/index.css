@@ -311,63 +311,17 @@ body {
   display: none;
 }
 
-/* Floating Comment Button */
-.comment-trigger {
+/* Inline Comment Input */
+.comment-input-wrapper {
   position: absolute;
-  right: 12px;
-  transform: translateY(-50%);
+  left: 1.25rem;
+  right: 2rem;
   z-index: 10;
-  display: flex;
-  align-items: flex-start;
-  flex-direction: row-reverse;
-}
-
-.comment-trigger-btn {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--bg);
-  border: none;
-  font-size: 0.875rem;
-  font-weight: 500;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-  transition: transform 0.15s, opacity 0.15s;
-}
-
-.comment-trigger-btn:hover {
-  transform: scale(1.1);
-  opacity: 0.9;
-}
-
-.comment-popover {
-  position: absolute;
-  right: 34px;
-  top: 0;
-  transform: translateY(-50%);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.6rem;
-  width: 300px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.comment-popover-selection {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  font-style: italic;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  border-radius: 6px;
+  padding: 0.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
 .comment-input-row {

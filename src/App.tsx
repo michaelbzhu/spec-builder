@@ -125,7 +125,6 @@ function EditorView() {
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [commentInput, setCommentInput] = useState("");
-  const [showPopover, setShowPopover] = useState(false);
 
   // Line selection state
   const [lineHeight, setLineHeight] = useState(0);
@@ -170,7 +169,6 @@ function EditorView() {
       if (e.key === "Escape") {
         setSelectedLines(null);
         setPendingSelection(null);
-        setShowPopover(false);
         return;
       }
       if (e.key === "Tab") {
@@ -204,7 +202,6 @@ function EditorView() {
       anchorLineRef.current = line;
       isDraggingRef.current = true;
       setSelectedLines({ start: line, end: line });
-      setShowPopover(false);
 
       // Sync pending selection
       const lines = markdown.split("\n");
@@ -252,10 +249,6 @@ function EditorView() {
     if (textarea) setScrollTop(textarea.scrollTop);
   }, []);
 
-  const handleCommentClick = useCallback(() => {
-    setShowPopover(true);
-  }, []);
-
   const handleSubmitComment = useCallback(() => {
     if (!pendingSelection || !commentInput.trim() || !selectedLines) return;
     // Position the comment card at the vertical center of the selection
@@ -269,7 +262,6 @@ function EditorView() {
       topPos
     );
     setCommentInput("");
-    setShowPopover(false);
     setSelectedLines(null);
     setPendingSelection(null);
   }, [pendingSelection, commentInput, selectedLines, lineHeight, paddingTop, addComment, setPendingSelection]);
@@ -279,7 +271,8 @@ function EditorView() {
       if (e.key === "Enter") {
         handleSubmitComment();
       } else if (e.key === "Escape") {
-        setShowPopover(false);
+        setSelectedLines(null);
+        setPendingSelection(null);
         setCommentInput("");
       }
     },
@@ -296,9 +289,9 @@ function EditorView() {
       }
     : null;
 
-  // Compute the button position (vertical center of selection, in viewport coords relative to wrapper)
-  const buttonTop = selectedLines && lineHeight > 0
-    ? paddingTop + ((selectedLines.start + selectedLines.end) / 2) * lineHeight - scrollTop + lineHeight / 2
+  // Compute the input position (bottom of selection, in viewport coords relative to wrapper)
+  const inputTop = selectedLines && lineHeight > 0
+    ? paddingTop + (selectedLines.end + 1) * lineHeight - scrollTop + 8
     : null;
 
   return (
@@ -327,42 +320,26 @@ function EditorView() {
             wrap="off"
             placeholder="Type your markdown here..."
           />
-          {pendingSelection && buttonTop !== null && (
-            <div className="comment-trigger" style={{ top: buttonTop }}>
-              <button
-                className="comment-trigger-btn"
-                onClick={handleCommentClick}
-                title="Add comment"
-              >
-                +
-              </button>
-              {showPopover && (
-                <div className="comment-popover">
-                  <div className="comment-popover-selection">
-                    "{pendingSelection.text.length > 60
-                      ? pendingSelection.text.slice(0, 60) + "..."
-                      : pendingSelection.text}"
-                  </div>
-                  <div className="comment-input-row">
-                    <input
-                      className="comment-input"
-                      type="text"
-                      placeholder="Add your comment..."
-                      value={commentInput}
-                      onChange={(e) => setCommentInput(e.target.value)}
-                      onKeyDown={handleInputKeyDown}
-                      autoFocus
-                    />
-                    <button
-                      className="comment-submit-btn"
-                      onClick={handleSubmitComment}
-                      disabled={!commentInput.trim()}
-                    >
-                      Send
-                    </button>
-                  </div>
-                </div>
-              )}
+          {pendingSelection && inputTop !== null && (
+            <div className="comment-input-wrapper" style={{ top: inputTop }}>
+              <div className="comment-input-row">
+                <input
+                  className="comment-input"
+                  type="text"
+                  placeholder="Add your comment..."
+                  value={commentInput}
+                  onChange={(e) => setCommentInput(e.target.value)}
+                  onKeyDown={handleInputKeyDown}
+                  autoFocus
+                />
+                <button
+                  className="comment-submit-btn"
+                  onClick={handleSubmitComment}
+                  disabled={!commentInput.trim()}
+                >
+                  Send
+                </button>
+              </div>
             </div>
           )}
         </div>
