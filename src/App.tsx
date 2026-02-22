@@ -217,20 +217,9 @@ function CommentChatSidebar({
   activeComment,
   onClearActive,
 }: {
-  activeComment: Comment | null;
+  activeComment: Comment;
   onClearActive: () => void;
 }) {
-  if (!activeComment) {
-    return (
-      <aside className="chat-sidebar" aria-label="Comment chat sidebar">
-        <div className="chat-sidebar-empty">
-          <h3>No Comment Selected</h3>
-          <p>Select a comment marker in the editor or create a new comment.</p>
-        </div>
-      </aside>
-    );
-  }
-
   return (
     <aside className="chat-sidebar" aria-label="Comment chat sidebar">
       <div className="chat-thread-header">
@@ -257,11 +246,10 @@ function CommentChatSidebar({
 
 function Toolbar() {
   const activeDoc = useEditorStore((s) => s.documents.find((d) => d.id === s.activeDocumentId));
-  const showComments = useEditorStore((s) => s.showComments);
-  const toggleComments = useEditorStore((s) => s.toggleComments);
 
   const charCount = activeDoc?.markdown.length ?? 0;
   const commentCount = activeDoc?.comments.length ?? 0;
+  const commentLabel = `${commentCount} comment${commentCount === 1 ? "" : "s"}`;
 
   return (
     <div className="editor-toolbar">
@@ -269,16 +257,7 @@ function Toolbar() {
         <span className="toolbar-char-count">{charCount} chars</span>
       </div>
       <div className="toolbar-right">
-        <button
-          className={`toolbar-btn toolbar-comments-btn ${showComments ? "active" : ""}`}
-          onClick={toggleComments}
-          title="Toggle comments"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-          </svg>
-          <span>{commentCount}</span>
-        </button>
+        <span className="toolbar-char-count">{commentLabel}</span>
       </div>
     </div>
   );
@@ -377,8 +356,6 @@ function EditorView() {
   const pendingSelection = useEditorStore((s) => s.pendingSelection);
   const setPendingSelection = useEditorStore((s) => s.setPendingSelection);
   const addComment = useEditorStore((s) => s.addComment);
-  const showComments = useEditorStore((s) => s.showComments);
-  const setShowComments = useEditorStore((s) => s.setShowComments);
   const setActiveComment = useEditorStore((s) => s.setActiveComment);
   const clearActiveComment = useEditorStore((s) => s.clearActiveComment);
   const activeCommentId = useEditorStore((s) => {
@@ -477,7 +454,6 @@ function EditorView() {
       const targetComment = comments.find((comment) => comment.id === commentId);
       if (!targetComment) return;
 
-      setShowComments(true);
       setActiveComment(commentId);
       setPendingLines(null);
       setPendingSelection(null);
@@ -485,7 +461,7 @@ function EditorView() {
       setIsDragging(false);
       anchorLineRef.current = null;
     },
-    [comments, isPreviewing, setActiveComment, setPendingSelection, setShowComments]
+    [comments, isPreviewing, setActiveComment, setPendingSelection]
   );
 
   const handleChange = useCallback(
@@ -586,7 +562,6 @@ function EditorView() {
       topPos
     );
 
-    setShowComments(true);
     setCommentInput("");
     setPendingLines(null);
     setPendingSelection(null);
@@ -599,7 +574,6 @@ function EditorView() {
     pendingLines,
     pendingSelection,
     setPendingSelection,
-    setShowComments,
   ]);
 
   const handleInputKeyDown = useCallback(
@@ -696,7 +670,7 @@ function EditorView() {
             </div>
           )}
 
-          {showComments && !isPreviewing && comments.length > 0 && (
+          {!isPreviewing && comments.length > 0 && (
             <CommentMarkersOverlay
               comments={comments}
               activeCommentId={activeCommentId}
@@ -706,7 +680,7 @@ function EditorView() {
           )}
         </div>
 
-        {showComments && (
+        {activeComment && (
           <CommentChatSidebar
             activeComment={activeComment}
             onClearActive={clearActiveComment}
