@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { marked } from "marked";
 import { parsePreviewMarkdown } from "./diffPreview";
+import { renderCommentMarkdown, renderEditorMarkdown } from "./markdown";
 import { useEditorStore, type Comment, type CommentMessage } from "./store";
 
 import "./index.css";
@@ -86,28 +86,16 @@ function getWordCount(text: string): number {
   return matches ? matches.length : 0;
 }
 
-function escapeHtml(markdown: string): string {
-  return markdown
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+function MarkdownCommentResponse({
+  markdown,
+  className = "comment-llm comment-llm-markdown",
+}: {
+  markdown: string;
+  className?: string;
+}) {
+  const html = useMemo(() => renderCommentMarkdown(markdown), [markdown]);
 
-function renderMarkdown(markdown: string): string {
-  const parsed = marked.parse(escapeHtml(markdown), {
-    async: false,
-    gfm: true,
-    breaks: true,
-  });
-  return typeof parsed === "string" ? parsed : "";
-}
-
-function MarkdownCommentResponse({ markdown }: { markdown: string }) {
-  const html = useMemo(() => renderMarkdown(markdown), [markdown]);
-
-  return <div className="comment-llm comment-llm-markdown" dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 function EditSuggestionCard({ comment }: { comment: Comment }) {
@@ -189,11 +177,11 @@ function CommentThreadContent({ comment }: { comment: Comment }) {
         {messages.map((message) =>
           message.role === "assistant" ? (
             <div key={message.id} className="chat-message chat-message--assistant">
-              <MarkdownCommentResponse markdown={message.content} />
+              <MarkdownCommentResponse markdown={message.content} className="comment-llm comment-llm-markdown" />
             </div>
           ) : (
             <div key={message.id} className="chat-message chat-message--user">
-              <div className="comment-user">{message.content}</div>
+              <MarkdownCommentResponse markdown={message.content} className="comment-user comment-llm-markdown" />
             </div>
           ),
         )}
@@ -248,6 +236,8 @@ function CommentMarkersOverlay({
       {markerItems.map(({ comment, stackIndex }) => {
         const isActive = comment.id === activeCommentId;
         const preview = buildCommentPreview(comment);
+        const messages = getCommentMessages(comment);
+        const messageCount = messages.length;
 
         return (
           <button
@@ -273,6 +263,11 @@ function CommentMarkersOverlay({
                   strokeLinejoin="round"
                 />
               </svg>
+              {messageCount > 1 && (
+                <span className="comment-marker-count" aria-hidden="true">
+                  {messageCount}
+                </span>
+              )}
             </span>
             <span className="comment-marker-preview">{preview}</span>
           </button>
@@ -492,9 +487,12 @@ function EditorView() {
   const [lineHeight, setLineHeight] = useState(0);
   const [paddingTop, setPaddingTop] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
   const [pendingLines, setPendingLines] = useState<{ start: number; end: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizingChatSidebar, setIsResizingChatSidebar] = useState(false);
+
+  const editorHighlightHtml = useMemo(() => renderEditorMarkdown(markdown), [markdown]);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -703,7 +701,9 @@ function EditorView() {
 
   const handleScroll = useCallback(() => {
     const el = textareaRef.current;
-    if (el) setScrollTop(el.scrollTop);
+    if (!el) return;
+    setScrollTop(el.scrollTop);
+    setScrollLeft(el.scrollLeft);
   }, []);
 
   const handleSubmitComment = useCallback(() => {
@@ -771,6 +771,20 @@ function EditorView() {
     <div className="editor-container">
       <div className={`editor-main${isResizingChatSidebar ? " editor-main--resizing" : ""}`}>
         <div className="editor-textarea-wrapper">
+          {!isPreviewing && (
+            <div className="editor-syntax-overlay" aria-hidden="true">
+              <pre
+                className="editor-syntax-content"
+                style={{ transform: `translate(${-scrollLeft}px, ${-scrollTop}px)` }}
+              >
+                <code
+                  className="hljs language-markdown"
+                  dangerouslySetInnerHTML={{ __html: editorHighlightHtml.length > 0 ? editorHighlightHtml : " " }}
+                />
+              </pre>
+            </div>
+          )}
+
           {pendingHighlightStyle && (
             <div
               className="line-highlight-overlay line-highlight-overlay--pending"
@@ -789,7 +803,7 @@ function EditorView() {
             <textarea
               key={activeDocumentId}
               ref={textareaRef}
-              className={`editor-textarea${pendingLines ? " line-selecting" : ""}`}
+              className={`editor-textarea editor-textarea--syntax${pendingLines ? " line-selecting" : ""}`}
               value={markdown}
               onChange={handleChange}
               onKeyDown={handleKeyDown}

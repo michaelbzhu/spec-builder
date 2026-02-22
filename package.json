@@ -10,7 +10,9 @@
   },
   "dependencies": {
     "diff": "^8.0.3",
+    "highlight.js": "^11.11.1",
     "marked": "^17.0.3",
+    "marked-highlight": "^2.2.3",
     "openai": "^4.85.4",
     "react": "^19",
     "react-dom": "^19",

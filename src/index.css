@@ -343,6 +343,33 @@ body {
   background: var(--bg);
 }
 
+.editor-syntax-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.editor-syntax-content {
+  margin: 0;
+  min-height: 100%;
+  padding: 1.25rem;
+  padding-right: 2rem;
+  font-family: "Geist Mono", "SF Mono", "Fira Code", Menlo, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  tab-size: 2;
+  letter-spacing: 0.01em;
+  white-space: pre;
+}
+
+.editor-syntax-content code {
+  font-family: inherit;
+  background: none;
+  padding: 0;
+}
+
 .line-highlight-overlay {
   position: absolute;
   left: 0;
@@ -391,6 +418,67 @@ body {
   color: var(--text-muted);
 }
 
+.editor-textarea--syntax {
+  color: transparent;
+  caret-color: var(--text);
+}
+
+.editor-textarea--syntax::selection {
+  background: rgba(157, 0, 6, 0.2);
+}
+
+.editor-syntax-content .hljs {
+  color: var(--text);
+}
+
+.editor-syntax-content .hljs-comment,
+.editor-syntax-content .hljs-quote {
+  color: #7c6f64;
+  font-style: italic;
+}
+
+.editor-syntax-content .hljs-section,
+.editor-syntax-content .hljs-strong {
+  color: #9d0006;
+}
+
+.editor-syntax-content .hljs-emphasis {
+  color: #b16286;
+  font-style: italic;
+}
+
+.editor-syntax-content .hljs-link,
+.editor-syntax-content .hljs-bullet,
+.editor-syntax-content .hljs-meta {
+  color: #076678;
+}
+
+.editor-syntax-content .hljs-code,
+.editor-syntax-content .hljs-string,
+.editor-syntax-content .hljs-title {
+  color: #79740e;
+}
+
+.editor-syntax-content .hljs-keyword,
+.editor-syntax-content .hljs-selector-tag,
+.editor-syntax-content .hljs-type,
+.editor-syntax-content .hljs-literal {
+  color: #9d0006;
+}
+
+.editor-syntax-content .hljs-number,
+.editor-syntax-content .hljs-symbol {
+  color: #af3a03;
+}
+
+.editor-syntax-content .hljs-built_in,
+.editor-syntax-content .hljs-function,
+.editor-syntax-content .hljs-attr,
+.editor-syntax-content .hljs-property,
+.editor-syntax-content .hljs-variable {
+  color: #076678;
+}
+
 /* Comment markers */
 .comment-markers-overlay {
   position: absolute;
@@ -403,7 +491,7 @@ body {
   position: absolute;
   min-width: 145px;
   max-width: 238px;
-  min-height: 30px;
+  min-height: 32px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -413,16 +501,21 @@ body {
   padding: 0.34rem 0.82rem 0.34rem 0.62rem;
   cursor: pointer;
   pointer-events: auto;
-  box-shadow: 0 2px 10px var(--shadow);
-  transition: transform 0.12s, border-color 0.12s, background 0.12s, box-shadow 0.12s;
+  box-shadow: 
+    0 1px 2px rgba(60, 56, 54, 0.05),
+    0 4px 12px var(--shadow);
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   text-align: left;
 }
 
 .comment-marker:hover {
   border-color: var(--blue);
   background: var(--header-bg);
-  transform: translateX(-2px);
-  box-shadow: 0 4px 12px var(--shadow-strong);
+  transform: translateX(-4px) scale(1.02);
+  box-shadow: 
+    0 2px 4px rgba(60, 56, 54, 0.1),
+    0 8px 20px var(--shadow-strong);
+  z-index: 10;
 }
 
 .comment-marker:focus-visible {
@@ -431,8 +524,9 @@ body {
 }
 
 .comment-marker-icon {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
+  position: relative;
   border-radius: 999px;
   background: var(--header-bg);
   color: var(--blue);
@@ -440,32 +534,65 @@ body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+  transition: transform 0.2s;
+}
+
+.comment-marker:hover .comment-marker-icon {
+  transform: scale(1.1);
+  background: var(--surface);
 }
 
 .comment-marker-icon-svg {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   display: block;
 }
 
 .comment-marker-preview {
   min-width: 0;
-  font-size: 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 500;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: -0.01em;
 }
 
 .comment-marker--active {
-  border-color: #b57614;
-  background: #ead8ac;
-  box-shadow: 0 4px 13px var(--shadow-strong);
+  border-color: #d79921;
+  background: #fabd2f22;
+  background-color: #f9f5d7;
+  box-shadow: 
+    0 0 0 2px #fabd2f44,
+    0 8px 24px var(--shadow-strong);
+  transform: translateX(-4px) scale(1.04);
 }
 
 .comment-marker--active .comment-marker-icon {
-  color: #79740e;
-  background: #d5c4a1;
+  color: #b57614;
+  background: #fabd2f;
+  box-shadow: 0 2px 4px rgba(181, 118, 20, 0.2);
+}
+
+.comment-marker-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 2px solid var(--surface);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .comment-marker--loading .comment-marker-icon {
@@ -864,6 +991,45 @@ body {
   background: none;
   padding: 0;
   font-size: 0.74rem;
+}
+
+.comment-llm-markdown pre code.hljs {
+  display: block;
+  color: #3c3836;
+  background: transparent;
+}
+
+.comment-llm-markdown pre code .hljs-comment,
+.comment-llm-markdown pre code .hljs-quote {
+  color: #7c6f64;
+  font-style: italic;
+}
+
+.comment-llm-markdown pre code .hljs-keyword,
+.comment-llm-markdown pre code .hljs-selector-tag,
+.comment-llm-markdown pre code .hljs-type,
+.comment-llm-markdown pre code .hljs-literal {
+  color: #9d0006;
+}
+
+.comment-llm-markdown pre code .hljs-string,
+.comment-llm-markdown pre code .hljs-title,
+.comment-llm-markdown pre code .hljs-section {
+  color: #79740e;
+}
+
+.comment-llm-markdown pre code .hljs-number,
+.comment-llm-markdown pre code .hljs-symbol,
+.comment-llm-markdown pre code .hljs-bullet {
+  color: #af3a03;
+}
+
+.comment-llm-markdown pre code .hljs-built_in,
+.comment-llm-markdown pre code .hljs-function,
+.comment-llm-markdown pre code .hljs-attr,
+.comment-llm-markdown pre code .hljs-property,
+.comment-llm-markdown pre code .hljs-variable {
+  color: #076678;
 }
 
 .comment-llm-markdown blockquote {
