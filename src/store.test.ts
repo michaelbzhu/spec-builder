@@ -19,6 +19,7 @@ afterEach(() => {
 });
 
 function buildComment(id: string): Comment {
+  const createdAt = Date.now();
   return {
     id,
     selectedText: "beta",
@@ -26,10 +27,30 @@ function buildComment(id: string): Comment {
     endLine: 1,
     userComment: "replace beta",
     llmResponse: "suggested edit",
+    messages: [
+      {
+        id: `${id}-user`,
+        role: "user",
+        content: "replace beta",
+        createdAt,
+      },
+      {
+        id: `${id}-assistant`,
+        role: "assistant",
+        content: "suggested edit",
+        createdAt: createdAt + 1,
+      },
+    ],
     loading: false,
-    createdAt: Date.now(),
+    createdAt,
     topPosition: 0,
   };
+}
+
+async function flushMicrotasks() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 function buildDoc(oldMarkdown: string, newMarkdown: string): Document {
@@ -201,5 +222,93 @@ describe("store active comment behavior", () => {
     expect(state.activeDocumentId).toBe("doc-1");
     expect(state.activeCommentIdByDoc["doc-1"]).toBe("comment-1");
     expect(state.activeCommentIdByDoc["doc-2"]).toBe("comment-2");
+  });
+});
+
+describe("store comment thread continuation", () => {
+  it("continueCommentThread appends user/assistant messages and clears loading", async () => {
+    let capturedRequestBody: any = null;
+
+    globalThis.fetch = (async (_input, init) => {
+      if (typeof init?.body === "string") {
+        capturedRequestBody = JSON.parse(init.body);
+      }
+
+      return new Response(JSON.stringify({ response: "Follow-up response" }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    useEditorStore.setState({
+      documents: [
+        {
+          id: "doc-1",
+          title: "Doc",
+          markdown: "alpha\nbeta\n",
+          comments: [buildComment("comment-1")],
+        },
+      ],
+      activeDocumentId: "doc-1",
+      activeCommentIdByDoc: { "doc-1": "comment-1" },
+      view: "editor",
+    });
+
+    useEditorStore.getState().continueCommentThread("comment-1", "Can you expand this?");
+
+    let comment = useEditorStore.getState().documents[0]?.comments[0];
+    const optimisticMessage = comment ? comment.messages[comment.messages.length - 1] : undefined;
+    expect(comment?.loading).toBe(true);
+    expect(optimisticMessage?.role).toBe("user");
+    expect(optimisticMessage?.content).toBe("Can you expand this?");
+    expect(capturedRequestBody?.threadMessages?.at(-1)?.content).toBe("Can you expand this?");
+
+    await flushMicrotasks();
+
+    comment = useEditorStore.getState().documents[0]?.comments[0];
+    const lastMessage = comment ? comment.messages[comment.messages.length - 1] : undefined;
+    expect(comment?.loading).toBe(false);
+    expect(lastMessage?.role).toBe("assistant");
+    expect(lastMessage?.content).toBe("Follow-up response");
+  });
+
+  it("continueCommentThread does nothing for empty input or loading comment", () => {
+    let fetchCount = 0;
+    globalThis.fetch = (() => {
+      fetchCount += 1;
+      return new Promise<Response>(() => {});
+    }) as typeof fetch;
+
+    useEditorStore.setState({
+      documents: [
+        {
+          id: "doc-1",
+          title: "Doc",
+          markdown: "alpha\nbeta\n",
+          comments: [buildComment("comment-1")],
+        },
+      ],
+      activeDocumentId: "doc-1",
+      activeCommentIdByDoc: { "doc-1": "comment-1" },
+      view: "editor",
+    });
+
+    useEditorStore.getState().continueCommentThread("comment-1", "   ");
+    expect(fetchCount).toBe(0);
+
+    useEditorStore.setState((state) => ({
+      documents: state.documents.map((doc) =>
+        doc.id === "doc-1"
+          ? {
+              ...doc,
+              comments: doc.comments.map((comment) =>
+                comment.id === "comment-1" ? { ...comment, loading: true } : comment
+              ),
+            }
+          : doc
+      ),
+    }));
+
+    useEditorStore.getState().continueCommentThread("comment-1", "Another message");
+    expect(fetchCount).toBe(0);
   });
 });

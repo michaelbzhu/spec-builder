@@ -19,6 +19,13 @@ export interface EditSuggestion {
   createdAt: number;
 }
 
+export interface CommentMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: number;
+}
+
 export interface Comment {
   id: string;
   selectedText: string;
@@ -26,6 +33,7 @@ export interface Comment {
   endLine: number;
   userComment: string;
   llmResponse: string | null;
+  messages: CommentMessage[];
   loading: boolean;
   createdAt: number;
   topPosition: number;
@@ -63,6 +71,7 @@ interface EditorStore {
     userComment: string,
     topPosition: number
   ) => void;
+  continueCommentThread: (commentId: string, userMessage: string) => void;
   switchDocument: (id: string) => void;
   deleteDocument: (id: string) => void;
   goToPrompt: () => void;
@@ -320,6 +329,13 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     const documentText = activeDocument.markdown;
 
     const commentId = crypto.randomUUID();
+    const initialUserMessage: CommentMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: userComment,
+      createdAt: Date.now(),
+    };
+
     const comment: Comment = {
       id: commentId,
       selectedText,
@@ -327,6 +343,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       endLine,
       userComment,
       llmResponse: null,
+      messages: [initialUserMessage],
       loading: true,
       createdAt: Date.now(),
       topPosition,
@@ -410,12 +427,25 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
                         }
                       : c.id === commentId
                         ? {
-                            ...c,
-                            llmResponse: infoMessage
-                              ? `${response}\n\n${infoMessage}`
-                              : response,
-                            loading: false,
-                            editSuggestion,
+                            ...(() => {
+                              const messageHistory = Array.isArray(c.messages) ? c.messages : [];
+                              const finalResponse = infoMessage
+                                ? `${response}\n\n${infoMessage}`
+                                : response;
+                              const assistantMessage: CommentMessage = {
+                                id: crypto.randomUUID(),
+                                role: "assistant",
+                                content: finalResponse,
+                                createdAt: Date.now(),
+                              };
+                              return {
+                                ...c,
+                                llmResponse: finalResponse,
+                                loading: false,
+                                editSuggestion,
+                                messages: [...messageHistory, assistantMessage],
+                              };
+                            })(),
                           }
                         : c
                   ),
@@ -430,11 +460,187 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
             d.id === activeDocumentId
               ? {
                   ...d,
+                  comments: d.comments.map((c) => {
+                    if (c.id !== commentId) return c;
+                    const messageHistory = Array.isArray(c.messages) ? c.messages : [];
+                    const errorResponse = "Error: " + err.message;
+                    const assistantMessage: CommentMessage = {
+                      id: crypto.randomUUID(),
+                      role: "assistant",
+                      content: errorResponse,
+                      createdAt: Date.now(),
+                    };
+                    return {
+                      ...c,
+                      llmResponse: errorResponse,
+                      loading: false,
+                      messages: [...messageHistory, assistantMessage],
+                    };
+                  }),
+                }
+              : d
+          ),
+        }));
+      });
+  },
+
+  continueCommentThread: (commentId: string, userMessage: string) => {
+    const trimmedMessage = userMessage.trim();
+    if (!trimmedMessage) return;
+
+    const { activeDocumentId } = get();
+    if (!activeDocumentId) return;
+    const doc = get().documents.find((d) => d.id === activeDocumentId);
+    if (!doc) return;
+
+    const comment = doc.comments.find((c) => c.id === commentId);
+    if (!comment || comment.loading) return;
+
+    const currentMessages = Array.isArray(comment.messages) ? comment.messages : [];
+    const nextUserMessage: CommentMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: trimmedMessage,
+      createdAt: Date.now(),
+    };
+    const nextMessages = [...currentMessages, nextUserMessage];
+
+    set((state) => ({
+      documents: state.documents.map((d) =>
+        d.id === activeDocumentId
+          ? {
+              ...d,
+              comments: d.comments.map((c) =>
+                c.id === commentId
+                  ? {
+                      ...c,
+                      loading: true,
+                      messages: [...(Array.isArray(c.messages) ? c.messages : []), nextUserMessage],
+                    }
+                  : c
+              ),
+            }
+          : d
+      ),
+    }));
+
+    fetch("/api/comment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        selectedText: comment.selectedText,
+        userComment: trimmedMessage,
+        documentText: doc.markdown,
+        threadMessages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
+      }),
+    })
+      .then((res) => res.json())
+      .then((data: any) => {
+        const response = data.response ?? data.error ?? "No response.";
+
+        let editSuggestion: EditSuggestion | undefined;
+        let infoMessage: string | null = null;
+
+        if (data.toolCall && data.toolCall.name === "edit_document") {
+          const args = data.toolCall.arguments;
+          const activeDoc = get().documents.find((d) => d.id === activeDocumentId);
+
+          if (activeDoc) {
+            const replacement = replaceFirstExact(
+              activeDoc.markdown,
+              String(args.oldString ?? ""),
+              String(args.newString ?? "")
+            );
+
+            if (replacement.found) {
+              const backupMarkdown = activeDoc.markdown;
+              const newMarkdown = replacement.result;
+              const diffPreview = buildDiffPreview(backupMarkdown, newMarkdown);
+              const previewMarkdown = buildPreviewMarkdown(diffPreview);
+
+              editSuggestion = {
+                id: crypto.randomUUID(),
+                oldString: String(args.oldString ?? ""),
+                newString: String(args.newString ?? ""),
+                reasoning: String(args.reasoning ?? ""),
+                status: "previewing",
+                backupMarkdown,
+                newMarkdown,
+                previewMarkdown,
+                diffPreview,
+                createdAt: Date.now(),
+              };
+            } else {
+              infoMessage =
+                "Could not preview this edit because the suggested original text was not found exactly.";
+            }
+          }
+        }
+
+        const finalResponse = infoMessage
+          ? `${response}\n\n${infoMessage}`
+          : response;
+        const assistantMessage: CommentMessage = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: finalResponse,
+          createdAt: Date.now(),
+        };
+
+        set((state) => ({
+          documents: state.documents.map((d) =>
+            d.id === activeDocumentId
+              ? {
+                  ...d,
                   comments: d.comments.map((c) =>
-                    c.id === commentId
-                      ? { ...c, llmResponse: "Error: " + err.message, loading: false }
-                      : c
+                    c.editSuggestion?.status === "previewing"
+                      ? {
+                          ...c,
+                          editSuggestion: {
+                            ...c.editSuggestion,
+                            status: "rejected",
+                          },
+                        }
+                      : c.id === commentId
+                        ? {
+                            ...c,
+                            llmResponse: finalResponse,
+                            loading: false,
+                            editSuggestion,
+                            messages: [
+                              ...(Array.isArray(c.messages) ? c.messages : []),
+                              assistantMessage,
+                            ],
+                          }
+                        : c
                   ),
+                }
+              : d
+          ),
+        }));
+      })
+      .catch((err) => {
+        set((state) => ({
+          documents: state.documents.map((d) =>
+            d.id === activeDocumentId
+              ? {
+                  ...d,
+                  comments: d.comments.map((c) => {
+                    if (c.id !== commentId) return c;
+                    const errorResponse = "Error: " + err.message;
+                    const assistantMessage: CommentMessage = {
+                      id: crypto.randomUUID(),
+                      role: "assistant",
+                      content: errorResponse,
+                      createdAt: Date.now(),
+                    };
+                    return {
+                      ...c,
+                      llmResponse: errorResponse,
+                      loading: false,
+                      messages: [...(Array.isArray(c.messages) ? c.messages : []), assistantMessage],
+                    };
+                  }),
                 }
               : d
           ),

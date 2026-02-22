@@ -71,7 +71,19 @@ const server = serve({
     "/api/comment": {
       POST: async (req) => {
         try {
-          const { selectedText, userComment, documentText } = await req.json();
+          const { selectedText, userComment, documentText, threadMessages } = await req.json();
+          const hasThreadMessages = Array.isArray(threadMessages) && threadMessages.length > 0;
+
+          const normalizedThreadMessages = hasThreadMessages
+            ? threadMessages
+                .filter(
+                  (m: any) =>
+                    (m?.role === "user" || m?.role === "assistant") &&
+                    typeof m?.content === "string" &&
+                    m.content.trim().length > 0
+                )
+                .map((m: any) => ({ role: m.role, content: m.content }))
+            : [];
 
           const completion = await openai.chat.completions.create({
             model: "openai/gpt-oss-120b:nitro",
@@ -80,11 +92,15 @@ const server = serve({
               {
                 role: "system",
                 content:
-                  "You are a helpful writing assistant. The user has highlighted a passage of text and left a comment. Provide a brief, constructive response addressing their comment. Prefer bullet points over tables. If the user is asking for a specific change that can be made to the document, use the edit_document tool to suggest the exact change.",
+                  "You are a helpful writing assistant. The user has highlighted a passage and is discussing it in a comment thread. Provide a brief, constructive response. Prefer bullet points over tables. If the user is asking for a specific change that can be made to the document, use the edit_document tool to suggest the exact change.",
               },
               {
                 role: "user",
-                content: `<full_document>
+                content: `<thread_context>
+You are discussing one anchored comment thread.
+</thread_context>
+
+<full_document>
 ${documentText ?? ""}
 </full_document>
 
@@ -92,10 +108,13 @@ ${documentText ?? ""}
 ${selectedText ?? ""}
 </selected_text>
 
-<user_comment>
+${hasThreadMessages
+  ? "<thread_messages_follow_below />"
+  : `<user_comment>
 ${userComment ?? ""}
-</user_comment>`,
+</user_comment>`}`,
               },
+              ...normalizedThreadMessages,
             ],
             tools: [editTool],
             tool_choice: "auto",

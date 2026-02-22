@@ -574,6 +574,79 @@ body {
   gap: 0.55rem;
 }
 
+.chat-messages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.chat-message {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-message--user .comment-user {
+  align-self: flex-end;
+  max-width: 92%;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.chat-message--assistant .comment-llm {
+  max-width: 100%;
+}
+
+.chat-thread-compose {
+  border-top: 1px solid var(--border);
+  padding: 0.7rem;
+  background: var(--surface);
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.chat-compose-input {
+  flex: 1;
+  min-height: 2.35rem;
+  max-height: 7rem;
+  resize: vertical;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.45rem 0.55rem;
+  font-family: inherit;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  outline: none;
+}
+
+.chat-compose-input:focus {
+  border-color: var(--text-muted);
+}
+
+.chat-compose-send {
+  height: 2.35rem;
+  padding: 0 0.8rem;
+  border-radius: 6px;
+  border: none;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.chat-compose-send:hover:not(:disabled) {
+  background: #ccc;
+}
+
+.chat-compose-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .comment-selected-text {
   font-size: 0.75rem;
   color: var(--text-muted);

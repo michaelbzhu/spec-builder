@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { marked } from "marked";
 import { parsePreviewMarkdown } from "./diffPreview";
-import { useEditorStore, type Comment } from "./store";
+import { useEditorStore, type Comment, type CommentMessage } from "./store";
 
 import "./index.css";
 
@@ -40,6 +40,34 @@ function buildLineLabel(comment: Comment): string {
   }
 
   return `Lines ${comment.startLine + 1}-${comment.endLine + 1}`;
+}
+
+function getCommentMessages(comment: Comment): CommentMessage[] {
+  if (Array.isArray(comment.messages) && comment.messages.length > 0) {
+    return comment.messages;
+  }
+
+  const fallbackMessages: CommentMessage[] = [];
+
+  if (comment.userComment.trim().length > 0) {
+    fallbackMessages.push({
+      id: `${comment.id}-legacy-user`,
+      role: "user",
+      content: comment.userComment,
+      createdAt: comment.createdAt,
+    });
+  }
+
+  if ((comment.llmResponse ?? "").trim().length > 0) {
+    fallbackMessages.push({
+      id: `${comment.id}-legacy-assistant`,
+      role: "assistant",
+      content: comment.llmResponse ?? "",
+      createdAt: comment.createdAt + 1,
+    });
+  }
+
+  return fallbackMessages;
 }
 
 function escapeHtml(markdown: string): string {
@@ -135,10 +163,24 @@ function EditSuggestionCard({ comment }: { comment: Comment }) {
 }
 
 function CommentThreadContent({ comment }: { comment: Comment }) {
+  const messages = useMemo(() => getCommentMessages(comment), [comment]);
+
   return (
     <>
       <div className="comment-selected-text">"{comment.selectedText}"</div>
-      <div className="comment-user">{comment.userComment}</div>
+      <div className="chat-messages-list">
+        {messages.map((message) =>
+          message.role === "assistant" ? (
+            <div key={message.id} className="chat-message chat-message--assistant">
+              <MarkdownCommentResponse markdown={message.content} />
+            </div>
+          ) : (
+            <div key={message.id} className="chat-message chat-message--user">
+              <div className="comment-user">{message.content}</div>
+            </div>
+          )
+        )}
+      </div>
       {comment.loading ? (
         <div className="comment-loading" aria-label="Generating response">
           <span className="loading-dot" />
@@ -146,10 +188,7 @@ function CommentThreadContent({ comment }: { comment: Comment }) {
           <span className="loading-dot" />
         </div>
       ) : (
-        <>
-          <MarkdownCommentResponse markdown={comment.llmResponse ?? ""} />
-          {comment.editSuggestion && <EditSuggestionCard comment={comment} />}
-        </>
+        comment.editSuggestion && <EditSuggestionCard comment={comment} />
       )}
     </>
   );
@@ -220,6 +259,31 @@ function CommentChatSidebar({
   activeComment: Comment;
   onClearActive: () => void;
 }) {
+  const continueCommentThread = useEditorStore((s) => s.continueCommentThread);
+  const [draftMessage, setDraftMessage] = useState("");
+
+  useEffect(() => {
+    setDraftMessage("");
+  }, [activeComment.id]);
+
+  const handleSendMessage = useCallback(() => {
+    const trimmedMessage = draftMessage.trim();
+    if (!trimmedMessage || activeComment.loading) return;
+
+    continueCommentThread(activeComment.id, trimmedMessage);
+    setDraftMessage("");
+  }, [activeComment.id, activeComment.loading, continueCommentThread, draftMessage]);
+
+  const handleDraftKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSendMessage();
+      }
+    },
+    [handleSendMessage]
+  );
+
   return (
     <aside className="chat-sidebar" aria-label="Comment chat sidebar">
       <div className="chat-thread-header">
@@ -239,6 +303,24 @@ function CommentChatSidebar({
       </div>
       <div className="chat-thread-body">
         <CommentThreadContent comment={activeComment} />
+      </div>
+      <div className="chat-thread-compose">
+        <textarea
+          className="chat-compose-input"
+          placeholder="Reply to this comment thread..."
+          rows={2}
+          value={draftMessage}
+          onChange={(e) => setDraftMessage(e.target.value)}
+          onKeyDown={handleDraftKeyDown}
+          disabled={activeComment.loading}
+        />
+        <button
+          className="chat-compose-send"
+          onClick={handleSendMessage}
+          disabled={!draftMessage.trim() || activeComment.loading}
+        >
+          {activeComment.loading ? "Sending..." : "Send"}
+        </button>
       </div>
     </aside>
   );
