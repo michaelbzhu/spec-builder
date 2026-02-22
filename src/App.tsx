@@ -70,6 +70,11 @@ function getCommentMessages(comment: Comment): CommentMessage[] {
   return fallbackMessages;
 }
 
+function getWordCount(text: string): number {
+  const matches = text.trim().match(/\S+/g);
+  return matches ? matches.length : 0;
+}
+
 function escapeHtml(markdown: string): string {
   return markdown
     .replace(/&/g, "&amp;")
@@ -151,10 +156,24 @@ function EditSuggestionCard({ comment }: { comment: Comment }) {
 
 function CommentThreadContent({ comment }: { comment: Comment }) {
   const messages = useMemo(() => getCommentMessages(comment), [comment]);
+  const lineCount = comment.endLine - comment.startLine + 1;
+  const wordCount = getWordCount(comment.selectedText);
+  const charCount = comment.selectedText.length;
 
   return (
     <>
-      <div className="comment-selected-text">"{comment.selectedText}"</div>
+      <section className="comment-selection-card" aria-label="Selected text details">
+        <div className="comment-selection-header">
+          <span className="comment-selection-title">Selected Text</span>
+          <span className="comment-selection-line">{buildLineLabel(comment)}</span>
+        </div>
+        <div className="comment-selection-meta">
+          <span>{lineCount} {lineCount === 1 ? "line" : "lines"}</span>
+          <span>{wordCount} {wordCount === 1 ? "word" : "words"}</span>
+          <span>{charCount} {charCount === 1 ? "char" : "chars"}</span>
+        </div>
+        <pre className="comment-selected-text">{comment.selectedText}</pre>
+      </section>
       <div className="chat-messages-list">
         {messages.map((message) =>
           message.role === "assistant" ? (
@@ -278,7 +297,6 @@ function CommentChatSidebar({
       <div className="chat-thread-header">
         <div className="chat-thread-meta">
           <span className="chat-thread-title">Comment Thread</span>
-          <span className="chat-thread-line">{buildLineLabel(activeComment)}</span>
         </div>
         <button
           type="button"
@@ -718,11 +736,6 @@ function EditorView() {
 
   if (!activeDoc) return null;
 
-  const activeHighlightStyle =
-    !isPreviewing && !pendingLines && activeComment
-      ? buildRangeStyle({ start: activeComment.startLine, end: activeComment.endLine })
-      : null;
-
   const pendingHighlightStyle = !isPreviewing ? buildRangeStyle(pendingLines) : null;
 
   const inputTop =
@@ -734,16 +747,6 @@ function EditorView() {
     <div className="editor-container">
       <div className={`editor-main${isResizingChatSidebar ? " editor-main--resizing" : ""}`}>
         <div className="editor-textarea-wrapper">
-          {activeHighlightStyle && (
-            <div
-              className="line-highlight-overlay line-highlight-overlay--active"
-              style={{
-                top: activeHighlightStyle.top,
-                height: activeHighlightStyle.height,
-              }}
-            />
-          )}
-
           {pendingHighlightStyle && (
             <div
               className="line-highlight-overlay line-highlight-overlay--pending"
