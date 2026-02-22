@@ -49,7 +49,14 @@ export function renderCommentMarkdown(markdown: string): string {
 
 function highlightMarkdownSource(text: string): string {
   try {
-    return hljs.highlight(text, { language: "markdown", ignoreIllegals: true }).value;
+    let underscorePlaceholder = "CODXUNDERSCOREPLACEHOLDER";
+    while (text.includes(underscorePlaceholder)) {
+      underscorePlaceholder += "X";
+    }
+
+    const neutralizedText = text.replaceAll("_", underscorePlaceholder);
+    const highlighted = hljs.highlight(neutralizedText, { language: "markdown", ignoreIllegals: true }).value;
+    return highlighted.replaceAll(underscorePlaceholder, "_");
   } catch {
     return escapeHtml(text);
   }

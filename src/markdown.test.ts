@@ -60,4 +60,25 @@ describe("renderEditorMarkdown", () => {
     expect(html).toContain("hljs-meta");
     expect(html).toContain("&lt;");
   });
+
+  it("does not treat identifier underscores as markdown emphasis", () => {
+    const html = renderEditorMarkdown("CONSTANT_NAME");
+
+    expect(html).toContain("CONSTANT_NAME");
+    expect(html).not.toContain("hljs-emphasis");
+  });
+
+  it("does not let unmatched underscores swallow following markdown syntax", () => {
+    const markdown = ["CONSTANT_NAME and more", "next line", "# heading"].join("\n");
+    const html = renderEditorMarkdown(markdown);
+
+    expect(html).toContain("CONSTANT_NAME");
+    expect(html).toContain("hljs-section");
+  });
+
+  it("keeps asterisk emphasis highlighting", () => {
+    const html = renderEditorMarkdown("*italic*");
+
+    expect(html).toContain("hljs-emphasis");
+  });
 });

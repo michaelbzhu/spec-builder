@@ -51,7 +51,7 @@ const server = serve({
               {
                 role: "system",
                 content:
-                  "You are a product spec writer. Given a user's idea of what they want to build, generate a clear, well-structured markdown specification document. Include sections for overview, goals, features, user stories, and technical considerations. Be concise but thorough. Output only the markdown document, no preamble.",
+                  "You are a product spec writer. Given a user's idea of what they want to build, generate a clear, well-structured markdown specification document. Include sections for overview, goals, features, user stories, and technical considerations. Be concise but thorough. Prefer code examples where necessary. Output only the markdown document, no preamble.",
               },
               {
                 role: "user",
@@ -80,7 +80,7 @@ const server = serve({
                   (m: any) =>
                     (m?.role === "user" || m?.role === "assistant") &&
                     typeof m?.content === "string" &&
-                    m.content.trim().length > 0
+                    m.content.trim().length > 0,
                 )
                 .map((m: any) => ({ role: m.role, content: m.content }))
             : [];
@@ -108,11 +108,13 @@ ${documentText ?? ""}
 ${selectedText ?? ""}
 </selected_text>
 
-${hasThreadMessages
-  ? "<thread_messages_follow_below />"
-  : `<user_comment>
+${
+  hasThreadMessages
+    ? "<thread_messages_follow_below />"
+    : `<user_comment>
 ${userComment ?? ""}
-</user_comment>`}`,
+</user_comment>`
+}`,
               },
               ...normalizedThreadMessages,
             ],
