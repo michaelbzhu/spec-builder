@@ -115,6 +115,19 @@ body {
   padding: 0.25rem 0;
 }
 
+.sidebar-footer {
+  border-top: 1px solid var(--border);
+  padding: 0.6rem 0.75rem;
+  flex-shrink: 0;
+}
+
+.sidebar-tip {
+  display: block;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
 .sidebar-item {
   display: flex;
   align-items: center;
@@ -1103,6 +1116,10 @@ body {
 @media (max-width: 640px) {
   .chat-sidebar-resizer,
   .chat-sidebar {
+    display: none;
+  }
+
+  .sidebar-tip {
     display: none;
   }
 

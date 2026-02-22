@@ -407,6 +407,9 @@ function Sidebar() {
           </div>
         ))}
       </div>
+      <div className="sidebar-footer">
+        <span className="sidebar-tip">Tip: try Command-click to add comments.</span>
+      </div>
     </div>
   );
 }
