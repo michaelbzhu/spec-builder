@@ -325,6 +325,10 @@ body {
   position: relative;
 }
 
+.editor-main--resizing {
+  cursor: col-resize;
+}
+
 .editor-textarea-wrapper {
   position: relative;
   flex: 1;
@@ -492,6 +496,30 @@ body {
 }
 
 /* Chat sidebar */
+.chat-sidebar-resizer {
+  width: 8px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  position: relative;
+  background: transparent;
+}
+
+.chat-sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background-color 0.15s;
+}
+
+.chat-sidebar-resizer:hover::after,
+.chat-sidebar-resizer--active::after {
+  background: var(--blue);
+}
+
 .chat-sidebar {
   width: var(--comments-width);
   flex-shrink: 0;
@@ -820,6 +848,7 @@ body {
 }
 
 @media (max-width: 640px) {
+  .chat-sidebar-resizer,
   .chat-sidebar {
     display: none;
   }

@@ -5,11 +5,11 @@ import { useEditorStore, type Comment, type CommentMessage } from "./store";
 
 import "./index.css";
 
-function GithubDiffView({
-  previewMarkdown,
-}: {
-  previewMarkdown: string;
-}) {
+const DEFAULT_CHAT_SIDEBAR_WIDTH = 500;
+const MIN_CHAT_SIDEBAR_WIDTH = 220;
+const MAX_CHAT_SIDEBAR_WIDTH = 640;
+
+function GithubDiffView({ previewMarkdown }: { previewMarkdown: string }) {
   const lines = parsePreviewMarkdown(previewMarkdown);
 
   return (
@@ -91,12 +91,7 @@ function renderMarkdown(markdown: string): string {
 function MarkdownCommentResponse({ markdown }: { markdown: string }) {
   const html = useMemo(() => renderMarkdown(markdown), [markdown]);
 
-  return (
-    <div
-      className="comment-llm comment-llm-markdown"
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  );
+  return <div className="comment-llm comment-llm-markdown" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 function EditSuggestionCard({ comment }: { comment: Comment }) {
@@ -132,11 +127,7 @@ function EditSuggestionCard({ comment }: { comment: Comment }) {
       <div className="edit-status edit-status-accepted">
         <span className="edit-status-icon">✓</span>
         <span>Edit applied</span>
-        <button
-          className="edit-status-dismiss"
-          onClick={() => dismissEdit(comment.id)}
-          title="Dismiss"
-        >
+        <button className="edit-status-dismiss" onClick={() => dismissEdit(comment.id)} title="Dismiss">
           ×
         </button>
       </div>
@@ -148,11 +139,7 @@ function EditSuggestionCard({ comment }: { comment: Comment }) {
       <div className="edit-status edit-status-rejected">
         <span className="edit-status-icon">✗</span>
         <span>Edit rejected - changes reverted</span>
-        <button
-          className="edit-status-dismiss"
-          onClick={() => dismissEdit(comment.id)}
-          title="Dismiss"
-        >
+        <button className="edit-status-dismiss" onClick={() => dismissEdit(comment.id)} title="Dismiss">
           ×
         </button>
       </div>
@@ -178,7 +165,7 @@ function CommentThreadContent({ comment }: { comment: Comment }) {
             <div key={message.id} className="chat-message chat-message--user">
               <div className="comment-user">{message.content}</div>
             </div>
-          )
+          ),
         )}
       </div>
       {comment.loading ? (
@@ -255,9 +242,11 @@ function CommentMarkersOverlay({
 function CommentChatSidebar({
   activeComment,
   onClearActive,
+  width,
 }: {
   activeComment: Comment;
   onClearActive: () => void;
+  width: number;
 }) {
   const continueCommentThread = useEditorStore((s) => s.continueCommentThread);
   const [draftMessage, setDraftMessage] = useState("");
@@ -281,11 +270,11 @@ function CommentChatSidebar({
         handleSendMessage();
       }
     },
-    [handleSendMessage]
+    [handleSendMessage],
   );
 
   return (
-    <aside className="chat-sidebar" aria-label="Comment chat sidebar">
+    <aside className="chat-sidebar" style={{ width }} aria-label="Comment chat sidebar">
       <div className="chat-thread-header">
         <div className="chat-thread-meta">
           <span className="chat-thread-title">Comment Thread</span>
@@ -402,7 +391,7 @@ function PromptView() {
         handleSubmit();
       }
     },
-    [handleSubmit]
+    [handleSubmit],
   );
 
   return (
@@ -419,11 +408,7 @@ function PromptView() {
           disabled={generating}
           rows={3}
         />
-        <button
-          className="prompt-submit"
-          onClick={handleSubmit}
-          disabled={!input.trim() || generating}
-        >
+        <button className="prompt-submit" onClick={handleSubmit} disabled={!input.trim() || generating}>
           {generating ? "Generating..." : "Generate Spec"}
         </button>
       </div>
@@ -447,25 +432,27 @@ function EditorView() {
 
   const markdown = activeDoc?.markdown ?? "";
   const comments = activeDoc?.comments ?? [];
-  const activeComment = activeCommentId
-    ? comments.find((comment) => comment.id === activeCommentId) ?? null
-    : null;
+  const activeComment = activeCommentId ? (comments.find((comment) => comment.id === activeCommentId) ?? null) : null;
 
   const previewComment = comments.find(
-    (c) => c.editSuggestion?.status === "previewing" && c.editSuggestion.previewMarkdown
+    (c) => c.editSuggestion?.status === "previewing" && c.editSuggestion.previewMarkdown,
   );
   const previewMarkdown = previewComment?.editSuggestion?.previewMarkdown ?? "";
   const isPreviewing = Boolean(previewMarkdown);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const anchorLineRef = useRef<number | null>(null);
+  const resizeStartXRef = useRef<number | null>(null);
+  const resizeStartWidthRef = useRef(DEFAULT_CHAT_SIDEBAR_WIDTH);
 
   const [commentInput, setCommentInput] = useState("");
+  const [chatSidebarWidth, setChatSidebarWidth] = useState(DEFAULT_CHAT_SIDEBAR_WIDTH);
   const [lineHeight, setLineHeight] = useState(0);
   const [paddingTop, setPaddingTop] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
   const [pendingLines, setPendingLines] = useState<{ start: number; end: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isResizingChatSidebar, setIsResizingChatSidebar] = useState(false);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -505,6 +492,12 @@ function EditorView() {
     setIsDragging(false);
   }, [isPreviewing, setPendingSelection]);
 
+  useEffect(() => {
+    if (activeComment) return;
+    setIsResizingChatSidebar(false);
+    resizeStartXRef.current = null;
+  }, [activeComment]);
+
   const getLineFromY = useCallback(
     (clientY: number) => {
       const el = textareaRef.current;
@@ -514,7 +507,7 @@ function EditorView() {
       const totalLines = markdown.split("\n").length;
       return Math.max(0, Math.min(Math.floor(y / lineHeight), totalLines - 1));
     },
-    [lineHeight, paddingTop, markdown]
+    [lineHeight, paddingTop, markdown],
   );
 
   const buildRangeStyle = useCallback(
@@ -526,7 +519,7 @@ function EditorView() {
         height: (range.end - range.start + 1) * lineHeight,
       };
     },
-    [lineHeight, paddingTop, scrollTop]
+    [lineHeight, paddingTop, scrollTop],
   );
 
   const handleSelectComment = useCallback(
@@ -543,14 +536,14 @@ function EditorView() {
       setIsDragging(false);
       anchorLineRef.current = null;
     },
-    [comments, isPreviewing, setActiveComment, setPendingSelection]
+    [comments, isPreviewing, setActiveComment, setPendingSelection],
   );
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       setMarkdown(e.target.value);
     },
-    [setMarkdown]
+    [setMarkdown],
   );
 
   const handleKeyDown = useCallback(
@@ -572,7 +565,7 @@ function EditorView() {
         });
       }
     },
-    [setMarkdown, setPendingSelection]
+    [setMarkdown, setPendingSelection],
   );
 
   const handleMouseDown = useCallback(
@@ -596,7 +589,7 @@ function EditorView() {
       setPendingSelection({ text, startLine: line, endLine: line });
       e.preventDefault();
     },
-    [getLineFromY, isPreviewing, markdown, setPendingSelection]
+    [getLineFromY, isPreviewing, markdown, setPendingSelection],
   );
 
   useEffect(() => {
@@ -625,6 +618,47 @@ function EditorView() {
     };
   }, [getLineFromY, isDragging, isPreviewing, markdown, setPendingSelection]);
 
+  useEffect(() => {
+    if (!isResizingChatSidebar) return;
+
+    const handleResizeMouseMove = (e: MouseEvent) => {
+      if (resizeStartXRef.current === null) return;
+      const deltaX = e.clientX - resizeStartXRef.current;
+      const nextWidth = Math.max(
+        MIN_CHAT_SIDEBAR_WIDTH,
+        Math.min(MAX_CHAT_SIDEBAR_WIDTH, resizeStartWidthRef.current - deltaX),
+      );
+      setChatSidebarWidth(nextWidth);
+    };
+
+    const handleResizeMouseUp = () => {
+      setIsResizingChatSidebar(false);
+      resizeStartXRef.current = null;
+    };
+
+    window.addEventListener("mousemove", handleResizeMouseMove);
+    window.addEventListener("mouseup", handleResizeMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleResizeMouseMove);
+      window.removeEventListener("mouseup", handleResizeMouseUp);
+    };
+  }, [isResizingChatSidebar]);
+
+  useEffect(() => {
+    if (!isResizingChatSidebar) return;
+
+    const { style } = document.body;
+    const previousCursor = style.cursor;
+    const previousUserSelect = style.userSelect;
+    style.cursor = "col-resize";
+    style.userSelect = "none";
+
+    return () => {
+      style.cursor = previousCursor;
+      style.userSelect = previousUserSelect;
+    };
+  }, [isResizingChatSidebar]);
+
   const handleScroll = useCallback(() => {
     const el = textareaRef.current;
     if (el) setScrollTop(el.scrollTop);
@@ -641,7 +675,7 @@ function EditorView() {
       pendingSelection.startLine,
       pendingSelection.endLine,
       commentInput.trim(),
-      topPos
+      topPos,
     );
 
     setCommentInput("");
@@ -668,7 +702,18 @@ function EditorView() {
         setCommentInput("");
       }
     },
-    [handleSubmitComment, setPendingSelection]
+    [handleSubmitComment, setPendingSelection],
+  );
+
+  const handleSidebarResizeMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (e.button !== 0) return;
+      resizeStartXRef.current = e.clientX;
+      resizeStartWidthRef.current = chatSidebarWidth;
+      setIsResizingChatSidebar(true);
+      e.preventDefault();
+    },
+    [chatSidebarWidth],
   );
 
   if (!activeDoc) return null;
@@ -687,7 +732,7 @@ function EditorView() {
 
   return (
     <div className="editor-container">
-      <div className="editor-main">
+      <div className={`editor-main${isResizingChatSidebar ? " editor-main--resizing" : ""}`}>
         <div className="editor-textarea-wrapper">
           {activeHighlightStyle && (
             <div
@@ -741,11 +786,7 @@ function EditorView() {
                   onKeyDown={handleInputKeyDown}
                   autoFocus
                 />
-                <button
-                  className="comment-submit-btn"
-                  onClick={handleSubmitComment}
-                  disabled={!commentInput.trim()}
-                >
+                <button className="comment-submit-btn" onClick={handleSubmitComment} disabled={!commentInput.trim()}>
                   Send
                 </button>
               </div>
@@ -763,10 +804,18 @@ function EditorView() {
         </div>
 
         {activeComment && (
-          <CommentChatSidebar
-            activeComment={activeComment}
-            onClearActive={clearActiveComment}
-          />
+          <>
+            <div
+              className={`chat-sidebar-resizer${isResizingChatSidebar ? " chat-sidebar-resizer--active" : ""}`}
+              onMouseDown={handleSidebarResizeMouseDown}
+              aria-hidden="true"
+            />
+            <CommentChatSidebar
+              activeComment={activeComment}
+              onClearActive={clearActiveComment}
+              width={chatSidebarWidth}
+            />
+          </>
         )}
       </div>
       <Toolbar />
