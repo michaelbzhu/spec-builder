@@ -395,22 +395,28 @@ body {
 
 .comment-marker {
   position: absolute;
-  width: 14px;
-  height: 14px;
+  min-width: 145px;
+  max-width: 238px;
+  min-height: 30px;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: rgba(34, 36, 42, 0.92);
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.34rem 0.82rem 0.34rem 0.62rem;
   cursor: pointer;
   pointer-events: auto;
-  transition: transform 0.12s, border-color 0.12s, background 0.12s;
+  box-shadow: 0 3px 16px rgba(0, 0, 0, 0.42);
+  transition: transform 0.12s, border-color 0.12s, background 0.12s, box-shadow 0.12s;
+  text-align: left;
 }
 
 .comment-marker:hover {
-  border-color: var(--text);
-  transform: scale(1.08);
+  border-color: var(--blue);
+  background: rgba(49, 52, 60, 0.96);
+  transform: translateX(-2px);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.5);
 }
 
 .comment-marker:focus-visible {
@@ -418,23 +424,45 @@ body {
   outline-offset: 2px;
 }
 
-.comment-marker-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--text-muted);
+.comment-marker-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(90, 170, 255, 0.16);
+  color: var(--blue);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.comment-marker-icon-svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+
+.comment-marker-preview {
+  min-width: 0;
+  font-size: 0.75rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .comment-marker--active {
   border-color: var(--green);
-  background: rgba(80, 227, 194, 0.12);
+  background: #1a332d;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.52);
 }
 
-.comment-marker--active .comment-marker-dot {
-  background: var(--green);
+.comment-marker--active .comment-marker-icon {
+  color: var(--green);
+  background: rgba(80, 227, 194, 0.2);
 }
 
-.comment-marker--loading .comment-marker-dot {
+.comment-marker--loading .comment-marker-icon {
   animation: pulse 1.2s ease-in-out infinite;
 }
 

@@ -42,6 +42,17 @@ function buildLineLabel(comment: Comment): string {
   return `Lines ${comment.startLine + 1}-${comment.endLine + 1}`;
 }
 
+function buildCommentPreview(comment: Comment): string {
+  const source = comment.userComment.trim() || comment.selectedText.trim();
+  const normalized = source.replace(/\s+/g, " ").trim();
+  if (!normalized) return "Open thread";
+
+  const maxLength = 46;
+  if (normalized.length <= maxLength) return normalized;
+
+  return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
+}
+
 function getCommentMessages(comment: Comment): CommentMessage[] {
   if (Array.isArray(comment.messages) && comment.messages.length > 0) {
     return comment.messages;
@@ -236,6 +247,7 @@ function CommentMarkersOverlay({
     <div className="comment-markers-overlay" aria-hidden="true">
       {markerItems.map(({ comment, stackIndex }) => {
         const isActive = comment.id === activeCommentId;
+        const preview = buildCommentPreview(comment);
 
         return (
           <button
@@ -243,14 +255,26 @@ function CommentMarkersOverlay({
             type="button"
             className={`comment-marker${isActive ? " comment-marker--active" : ""}${comment.loading ? " comment-marker--loading" : ""}`}
             style={{
-              top: comment.topPosition - scrollTop - 8,
-              right: 8 + stackIndex * 13,
+              top: comment.topPosition - scrollTop - 12 + stackIndex * 4,
+              right: 8 + stackIndex * 28,
             }}
             onClick={() => onSelectComment(comment.id)}
-            title={`Open comment on ${buildLineLabel(comment)}`}
-            aria-label={`Open comment on ${buildLineLabel(comment)}`}
+            title={`Open thread on ${buildLineLabel(comment)}: ${preview}`}
+            aria-label={`Open thread on ${buildLineLabel(comment)}: ${preview}`}
           >
-            <span className="comment-marker-dot" />
+            <span className="comment-marker-icon" aria-hidden="true">
+              <svg viewBox="0 0 16 16" className="comment-marker-icon-svg">
+                <path
+                  d="M3.25 2.25h9.5a1 1 0 0 1 1 1v5.5a1 1 0 0 1-1 1H7.1L4.2 12V9.75H3.25a1 1 0 0 1-1-1v-5.5a1 1 0 0 1 1-1Z"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+            <span className="comment-marker-preview">{preview}</span>
           </button>
         );
       })}
