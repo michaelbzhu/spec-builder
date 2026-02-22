@@ -288,10 +288,21 @@ function CommentChatSidebar({
 }) {
   const continueCommentThread = useEditorStore((s) => s.continueCommentThread);
   const [draftMessage, setDraftMessage] = useState("");
+  const threadBodyRef = useRef<HTMLDivElement>(null);
+  const messageCount = Array.isArray(activeComment.messages)
+    ? activeComment.messages.length
+    : getCommentMessages(activeComment).length;
 
   useEffect(() => {
     setDraftMessage("");
   }, [activeComment.id]);
+
+  useEffect(() => {
+    const el = threadBodyRef.current;
+    if (!el) return;
+
+    el.scrollTop = el.scrollHeight;
+  }, [activeComment.id, activeComment.loading, messageCount]);
 
   const handleSendMessage = useCallback(() => {
     const trimmedMessage = draftMessage.trim();
@@ -327,7 +338,7 @@ function CommentChatSidebar({
           ×
         </button>
       </div>
-      <div className="chat-thread-body">
+      <div ref={threadBodyRef} className="chat-thread-body">
         <CommentThreadContent comment={activeComment} />
       </div>
       <div className="chat-thread-compose">
