@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { parsePreviewMarkdown } from "./diffPreview";
 import { useEditorStore, type Comment } from "./store";
 
@@ -32,6 +32,15 @@ function GithubDiffView({
     </div>
   );
 }
+
+function buildLineLabel(comment: Comment): string {
+  if (comment.startLine === comment.endLine) {
+    return `Line ${comment.startLine + 1}`;
+  }
+
+  return `Lines ${comment.startLine + 1}-${comment.endLine + 1}`;
+}
+
 function EditSuggestionCard({ comment }: { comment: Comment }) {
   const applyEdit = useEditorStore((s) => s.applyEdit);
   const rejectEdit = useEditorStore((s) => s.rejectEdit);
@@ -95,6 +104,127 @@ function EditSuggestionCard({ comment }: { comment: Comment }) {
   return null;
 }
 
+function CommentThreadContent({ comment }: { comment: Comment }) {
+  return (
+    <>
+      <div className="comment-selected-text">"{comment.selectedText}"</div>
+      <div className="comment-user">{comment.userComment}</div>
+      {comment.loading ? (
+        <div className="comment-loading" aria-label="Generating response">
+          <span className="loading-dot" />
+          <span className="loading-dot" />
+          <span className="loading-dot" />
+        </div>
+      ) : (
+        <>
+          <div className="comment-llm">{comment.llmResponse}</div>
+          {comment.editSuggestion && <EditSuggestionCard comment={comment} />}
+        </>
+      )}
+    </>
+  );
+}
+
+function CommentMarkersOverlay({
+  comments,
+  activeCommentId,
+  scrollTop,
+  onSelectComment,
+}: {
+  comments: Comment[];
+  activeCommentId: string | null;
+  scrollTop: number;
+  onSelectComment: (commentId: string) => void;
+}) {
+  const markerItems = useMemo(() => {
+    const sorted = [...comments].sort((a, b) => {
+      if (a.topPosition !== b.topPosition) return a.topPosition - b.topPosition;
+      if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt;
+      return a.id.localeCompare(b.id);
+    });
+
+    const perRowCount = new Map<number, number>();
+
+    return sorted.map((comment) => {
+      const rowKey = Math.round(comment.topPosition / 16);
+      const stackIndex = perRowCount.get(rowKey) ?? 0;
+      perRowCount.set(rowKey, stackIndex + 1);
+
+      return {
+        comment,
+        stackIndex,
+      };
+    });
+  }, [comments]);
+
+  return (
+    <div className="comment-markers-overlay" aria-hidden="true">
+      {markerItems.map(({ comment, stackIndex }) => {
+        const isActive = comment.id === activeCommentId;
+
+        return (
+          <button
+            key={comment.id}
+            type="button"
+            className={`comment-marker${isActive ? " comment-marker--active" : ""}${comment.loading ? " comment-marker--loading" : ""}`}
+            style={{
+              top: comment.topPosition - scrollTop - 8,
+              right: 8 + stackIndex * 13,
+            }}
+            onClick={() => onSelectComment(comment.id)}
+            title={`Open comment on ${buildLineLabel(comment)}`}
+            aria-label={`Open comment on ${buildLineLabel(comment)}`}
+          >
+            <span className="comment-marker-dot" />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function CommentChatSidebar({
+  activeComment,
+  onClearActive,
+}: {
+  activeComment: Comment | null;
+  onClearActive: () => void;
+}) {
+  if (!activeComment) {
+    return (
+      <aside className="chat-sidebar" aria-label="Comment chat sidebar">
+        <div className="chat-sidebar-empty">
+          <h3>No Comment Selected</h3>
+          <p>Select a comment marker in the editor or create a new comment.</p>
+        </div>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="chat-sidebar" aria-label="Comment chat sidebar">
+      <div className="chat-thread-header">
+        <div className="chat-thread-meta">
+          <span className="chat-thread-title">Comment Thread</span>
+          <span className="chat-thread-line">{buildLineLabel(activeComment)}</span>
+        </div>
+        <button
+          type="button"
+          className="chat-thread-clear"
+          onClick={onClearActive}
+          title="Clear active comment"
+          aria-label="Clear active comment"
+        >
+          ×
+        </button>
+      </div>
+      <div className="chat-thread-body">
+        <CommentThreadContent comment={activeComment} />
+      </div>
+    </aside>
+  );
+}
+
 function Toolbar() {
   const activeDoc = useEditorStore((s) => s.documents.find((d) => d.id === s.activeDocumentId));
   const showComments = useEditorStore((s) => s.showComments);
@@ -120,27 +250,6 @@ function Toolbar() {
           <span>{commentCount}</span>
         </button>
       </div>
-    </div>
-  );
-}
-
-function CommentCard({ comment }: { comment: Comment }) {
-  return (
-    <div className="comment-card" style={{ top: comment.topPosition }}>
-      <div className="comment-selected-text">"{comment.selectedText}"</div>
-      <div className="comment-user">{comment.userComment}</div>
-      {comment.loading ? (
-        <div className="comment-loading">
-          <span className="loading-dot" />
-          <span className="loading-dot" />
-          <span className="loading-dot" />
-        </div>
-      ) : (
-        <>
-          <div className="comment-llm">{comment.llmResponse}</div>
-          {comment.editSuggestion && <EditSuggestionCard comment={comment} />}
-        </>
-      )}
     </div>
   );
 }
@@ -239,9 +348,20 @@ function EditorView() {
   const setPendingSelection = useEditorStore((s) => s.setPendingSelection);
   const addComment = useEditorStore((s) => s.addComment);
   const showComments = useEditorStore((s) => s.showComments);
+  const setShowComments = useEditorStore((s) => s.setShowComments);
+  const setActiveComment = useEditorStore((s) => s.setActiveComment);
+  const clearActiveComment = useEditorStore((s) => s.clearActiveComment);
+  const activeCommentId = useEditorStore((s) => {
+    if (!s.activeDocumentId) return null;
+    return s.activeCommentIdByDoc[s.activeDocumentId] ?? null;
+  });
 
   const markdown = activeDoc?.markdown ?? "";
   const comments = activeDoc?.comments ?? [];
+  const activeComment = activeCommentId
+    ? comments.find((comment) => comment.id === activeCommentId) ?? null
+    : null;
+
   const previewComment = comments.find(
     (c) => c.editSuggestion?.status === "previewing" && c.editSuggestion.previewMarkdown
   );
@@ -249,14 +369,14 @@ function EditorView() {
   const isPreviewing = Boolean(previewMarkdown);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [commentInput, setCommentInput] = useState("");
+  const anchorLineRef = useRef<number | null>(null);
 
+  const [commentInput, setCommentInput] = useState("");
   const [lineHeight, setLineHeight] = useState(0);
   const [paddingTop, setPaddingTop] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
-  const [selectedLines, setSelectedLines] = useState<{ start: number; end: number } | null>(null);
+  const [pendingLines, setPendingLines] = useState<{ start: number; end: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const anchorLineRef = useRef<number | null>(null);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -269,8 +389,28 @@ function EditorView() {
   }, [activeDocumentId]);
 
   useEffect(() => {
+    if (!activeCommentId) return;
+
+    const activeCommentExists = comments.some((comment) => comment.id === activeCommentId);
+    if (!activeCommentExists) {
+      clearActiveComment();
+    }
+  }, [activeCommentId, clearActiveComment, comments]);
+
+  useEffect(() => {
+    if (!activeComment || isPreviewing) return;
+
+    const el = textareaRef.current;
+    if (!el) return;
+
+    const targetTop = Math.max(0, activeComment.topPosition - el.clientHeight * 0.4);
+    el.scrollTo({ top: targetTop, behavior: "smooth" });
+    setScrollTop(targetTop);
+  }, [activeCommentId, activeDocumentId, activeComment, isPreviewing]);
+
+  useEffect(() => {
     if (!isPreviewing) return;
-    setSelectedLines(null);
+    setPendingLines(null);
     setPendingSelection(null);
     setCommentInput("");
     setIsDragging(false);
@@ -288,6 +428,36 @@ function EditorView() {
     [lineHeight, paddingTop, markdown]
   );
 
+  const buildRangeStyle = useCallback(
+    (range: { start: number; end: number } | null) => {
+      if (!range || lineHeight <= 0) return null;
+
+      return {
+        top: paddingTop + range.start * lineHeight - scrollTop,
+        height: (range.end - range.start + 1) * lineHeight,
+      };
+    },
+    [lineHeight, paddingTop, scrollTop]
+  );
+
+  const handleSelectComment = useCallback(
+    (commentId: string) => {
+      if (isPreviewing) return;
+
+      const targetComment = comments.find((comment) => comment.id === commentId);
+      if (!targetComment) return;
+
+      setShowComments(true);
+      setActiveComment(commentId);
+      setPendingLines(null);
+      setPendingSelection(null);
+      setCommentInput("");
+      setIsDragging(false);
+      anchorLineRef.current = null;
+    },
+    [comments, isPreviewing, setActiveComment, setPendingSelection, setShowComments]
+  );
+
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       setMarkdown(e.target.value);
@@ -298,7 +468,7 @@ function EditorView() {
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Escape") {
-        setSelectedLines(null);
+        setPendingLines(null);
         setPendingSelection(null);
         return;
       }
@@ -323,7 +493,7 @@ function EditorView() {
       if (e.button !== 0) return;
 
       if (!e.metaKey) {
-        setSelectedLines(null);
+        setPendingLines(null);
         setPendingSelection(null);
         return;
       }
@@ -331,7 +501,7 @@ function EditorView() {
       const line = getLineFromY(e.clientY);
       anchorLineRef.current = line;
       setIsDragging(true);
-      setSelectedLines({ start: line, end: line });
+      setPendingLines({ start: line, end: line });
 
       const lines = markdown.split("\n");
       const text = lines[line] ?? "";
@@ -348,7 +518,7 @@ function EditorView() {
       const anchor = anchorLineRef.current;
       const startLine = Math.min(anchor, line);
       const endLine = Math.max(anchor, line);
-      setSelectedLines({ start: startLine, end: endLine });
+      setPendingLines({ start: startLine, end: endLine });
 
       const lines = markdown.split("\n");
       const text = lines.slice(startLine, endLine + 1).join("\n");
@@ -373,10 +543,11 @@ function EditorView() {
   }, []);
 
   const handleSubmitComment = useCallback(() => {
-    if (isPreviewing || !pendingSelection || !commentInput.trim() || !selectedLines) return;
+    if (isPreviewing || !pendingSelection || !commentInput.trim() || !pendingLines) return;
 
-    const centerLine = (selectedLines.start + selectedLines.end) / 2;
+    const centerLine = (pendingLines.start + pendingLines.end) / 2;
     const topPos = paddingTop + centerLine * lineHeight;
+
     addComment(
       pendingSelection.text,
       pendingSelection.startLine,
@@ -384,8 +555,10 @@ function EditorView() {
       commentInput.trim(),
       topPos
     );
+
+    setShowComments(true);
     setCommentInput("");
-    setSelectedLines(null);
+    setPendingLines(null);
     setPendingSelection(null);
   }, [
     addComment,
@@ -393,9 +566,10 @@ function EditorView() {
     isPreviewing,
     lineHeight,
     paddingTop,
+    pendingLines,
     pendingSelection,
-    selectedLines,
     setPendingSelection,
+    setShowComments,
   ]);
 
   const handleInputKeyDown = useCallback(
@@ -403,7 +577,7 @@ function EditorView() {
       if (e.key === "Enter") {
         handleSubmitComment();
       } else if (e.key === "Escape") {
-        setSelectedLines(null);
+        setPendingLines(null);
         setPendingSelection(null);
         setCommentInput("");
       }
@@ -413,32 +587,42 @@ function EditorView() {
 
   if (!activeDoc) return null;
 
-  const highlightStyle =
-    !isPreviewing && selectedLines && lineHeight > 0
-      ? {
-          top: paddingTop + selectedLines.start * lineHeight - scrollTop,
-          height: (selectedLines.end - selectedLines.start + 1) * lineHeight,
-        }
+  const activeHighlightStyle =
+    !isPreviewing && !pendingLines && activeComment
+      ? buildRangeStyle({ start: activeComment.startLine, end: activeComment.endLine })
       : null;
 
+  const pendingHighlightStyle = !isPreviewing ? buildRangeStyle(pendingLines) : null;
+
   const inputTop =
-    !isPreviewing && selectedLines && lineHeight > 0
-      ? paddingTop + (selectedLines.end + 1) * lineHeight - scrollTop + 8
+    !isPreviewing && pendingLines && lineHeight > 0
+      ? paddingTop + (pendingLines.end + 1) * lineHeight - scrollTop + 8
       : null;
 
   return (
     <div className="editor-container">
       <div className="editor-main">
         <div className="editor-textarea-wrapper">
-          {highlightStyle && (
+          {activeHighlightStyle && (
             <div
-              className="line-highlight-overlay"
+              className="line-highlight-overlay line-highlight-overlay--active"
               style={{
-                top: highlightStyle.top,
-                height: highlightStyle.height,
+                top: activeHighlightStyle.top,
+                height: activeHighlightStyle.height,
               }}
             />
           )}
+
+          {pendingHighlightStyle && (
+            <div
+              className="line-highlight-overlay line-highlight-overlay--pending"
+              style={{
+                top: pendingHighlightStyle.top,
+                height: pendingHighlightStyle.height,
+              }}
+            />
+          )}
+
           {isPreviewing ? (
             <div className="editor-textarea editor-textarea--preview">
               <GithubDiffView previewMarkdown={previewMarkdown} />
@@ -447,7 +631,7 @@ function EditorView() {
             <textarea
               key={activeDocumentId}
               ref={textareaRef}
-              className={`editor-textarea${selectedLines ? " line-selecting" : ""}`}
+              className={`editor-textarea${pendingLines ? " line-selecting" : ""}`}
               value={markdown}
               onChange={handleChange}
               onKeyDown={handleKeyDown}
@@ -458,6 +642,7 @@ function EditorView() {
               placeholder="Type your markdown here..."
             />
           )}
+
           {!isPreviewing && pendingSelection && inputTop !== null && !isDragging && (
             <div className="comment-input-wrapper" style={{ top: inputTop }}>
               <div className="comment-input-row">
@@ -480,14 +665,22 @@ function EditorView() {
               </div>
             </div>
           )}
+
+          {showComments && !isPreviewing && comments.length > 0 && (
+            <CommentMarkersOverlay
+              comments={comments}
+              activeCommentId={activeCommentId}
+              scrollTop={scrollTop}
+              onSelectComment={handleSelectComment}
+            />
+          )}
         </div>
 
         {showComments && (
-          <div className="comments-margin">
-            {comments.map((c) => (
-              <CommentCard key={c.id} comment={c} />
-            ))}
-          </div>
+          <CommentChatSidebar
+            activeComment={activeComment}
+            onClearActive={clearActiveComment}
+          />
         )}
       </div>
       <Toolbar />

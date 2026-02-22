@@ -339,8 +339,16 @@ body {
   right: 0;
   pointer-events: none;
   z-index: 1;
+}
+
+.line-highlight-overlay--pending {
   background: rgba(255, 255, 255, 0.07);
   border-left: 3px solid var(--blue);
+}
+
+.line-highlight-overlay--active {
+  background: rgba(80, 227, 194, 0.12);
+  border-left: 3px solid var(--green);
 }
 
 .editor-textarea.line-selecting::selection {
@@ -373,18 +381,57 @@ body {
   color: var(--text-muted);
 }
 
-/* Comments margin */
-.comments-margin {
-  width: var(--comments-width);
-  flex-shrink: 0;
-  position: relative;
-  overflow-y: auto;
-  background: var(--bg);
-  border-left: 1px solid var(--border);
+/* Comment markers */
+.comment-markers-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 7;
 }
 
-.comments-margin:empty {
-  display: none;
+.comment-marker {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 0.12s, border-color 0.12s, background 0.12s;
+}
+
+.comment-marker:hover {
+  border-color: var(--text);
+  transform: scale(1.08);
+}
+
+.comment-marker:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.comment-marker-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.comment-marker--active {
+  border-color: var(--green);
+  background: rgba(80, 227, 194, 0.12);
+}
+
+.comment-marker--active .comment-marker-dot {
+  background: var(--green);
+}
+
+.comment-marker--loading .comment-marker-dot {
+  animation: pulse 1.2s ease-in-out infinite;
 }
 
 /* Inline Comment Input */
@@ -444,24 +491,87 @@ body {
   cursor: not-allowed;
 }
 
-/* Comment cards in the margin */
-.comment-card {
-  position: absolute;
-  left: 0;
-  right: 0;
+/* Chat sidebar */
+.chat-sidebar {
+  width: var(--comments-width);
+  flex-shrink: 0;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chat-sidebar-empty {
+  margin: auto 1rem;
+  padding: 1rem;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 0.6rem;
-  margin: 0 0.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  transition: border-color 0.15s;
+  color: var(--text-muted);
 }
 
-.comment-card:hover {
-  border-color: var(--text-muted);
+.chat-sidebar-empty h3 {
+  font-size: 0.85rem;
+  color: var(--text);
+  margin-bottom: 0.45rem;
+}
+
+.chat-sidebar-empty p {
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.chat-thread-header {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chat-thread-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.chat-thread-title {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.chat-thread-line {
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.chat-thread-clear {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.chat-thread-clear:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.chat-thread-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
 }
 
 .comment-selected-text {
@@ -524,32 +634,32 @@ body {
 
 /* Scrollbar styling */
 .editor-textarea::-webkit-scrollbar,
-.comments-margin::-webkit-scrollbar,
+.chat-thread-body::-webkit-scrollbar,
 .sidebar-list::-webkit-scrollbar {
   width: 6px;
 }
 
 .editor-textarea::-webkit-scrollbar-track,
-.comments-margin::-webkit-scrollbar-track,
+.chat-thread-body::-webkit-scrollbar-track,
 .sidebar-list::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .editor-textarea::-webkit-scrollbar-thumb,
-.comments-margin::-webkit-scrollbar-thumb,
+.chat-thread-body::-webkit-scrollbar-thumb,
 .sidebar-list::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 3px;
 }
 
 .editor-textarea::-webkit-scrollbar-thumb:hover,
-.comments-margin::-webkit-scrollbar-thumb:hover,
+.chat-thread-body::-webkit-scrollbar-thumb:hover,
 .sidebar-list::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
 
 @media (max-width: 640px) {
-  .comments-margin {
+  .chat-sidebar {
     display: none;
   }
 

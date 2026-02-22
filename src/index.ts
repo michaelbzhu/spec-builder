@@ -12,26 +12,27 @@ const editTool = {
   type: "function" as const,
   function: {
     name: "edit_document",
-    description: "Suggest an edit to the document by replacing text. Use this when the user's comment suggests a specific change to the document that can be accomplished by finding and replacing text.",
+    description:
+      "Suggest an edit to the document by replacing text. Use this when the user's comment suggests a specific change to the document that can be accomplished by finding and replacing text.",
     parameters: {
       type: "object",
       properties: {
         oldString: {
           type: "string",
-          description: "The exact text to find and replace (must match exactly in the document)"
+          description: "The exact text to find and replace (must match exactly in the document)",
         },
         newString: {
           type: "string",
-          description: "The replacement text"
+          description: "The replacement text",
         },
         reasoning: {
           type: "string",
-          description: "Brief explanation of why this edit is suggested and how it addresses the user's comment"
-        }
+          description: "Brief explanation of why this edit is suggested and how it addresses the user's comment",
+        },
       },
-      required: ["oldString", "newString", "reasoning"]
-    }
-  }
+      required: ["oldString", "newString", "reasoning"],
+    },
+  },
 };
 
 const server = serve({
@@ -44,12 +45,13 @@ const server = serve({
         try {
           const { prompt } = await req.json();
           const completion = await openai.chat.completions.create({
-            model: "openai/gpt-5.2",
+            model: "openai/gpt-oss-120b:nitro",
             max_tokens: 4096,
             messages: [
               {
                 role: "system",
-                content: "You are a product spec writer. Given a user's idea of what they want to build, generate a clear, well-structured markdown specification document. Include sections for overview, goals, features, user stories, and technical considerations. Be concise but thorough. Output only the markdown document, no preamble.",
+                content:
+                  "You are a product spec writer. Given a user's idea of what they want to build, generate a clear, well-structured markdown specification document. Include sections for overview, goals, features, user stories, and technical considerations. Be concise but thorough. Output only the markdown document, no preamble.",
               },
               {
                 role: "user",
@@ -61,10 +63,7 @@ const server = serve({
           return Response.json({ response });
         } catch (err: any) {
           console.error("OpenRouter error:", err);
-          return Response.json(
-            { error: err.message ?? "LLM request failed" },
-            { status: 500 }
-          );
+          return Response.json({ error: err.message ?? "LLM request failed" }, { status: 500 });
         }
       },
     },
@@ -72,19 +71,30 @@ const server = serve({
     "/api/comment": {
       POST: async (req) => {
         try {
-          const { selectedText, userComment } = await req.json();
+          const { selectedText, userComment, documentText } = await req.json();
 
           const completion = await openai.chat.completions.create({
-            model: "openai/gpt-5.2",
+            model: "openai/gpt-oss-120b:nitro",
             max_tokens: 2048,
             messages: [
               {
                 role: "system",
-                content: "You are a helpful writing assistant. The user has highlighted a passage of text and left a comment. Provide a brief, constructive response addressing their comment. If the user is asking for a specific change that can be made to the document, use the edit_document tool to suggest the exact change.",
+                content:
+                  "You are a helpful writing assistant. The user has highlighted a passage of text and left a comment. Provide a brief, constructive response addressing their comment. If the user is asking for a specific change that can be made to the document, use the edit_document tool to suggest the exact change.",
               },
               {
                 role: "user",
-                content: `Selected text: "${selectedText}"\n\nComment: ${userComment}`,
+                content: `<full_document>
+${documentText ?? ""}
+</full_document>
+
+<selected_text>
+${selectedText ?? ""}
+</selected_text>
+
+<user_comment>
+${userComment ?? ""}
+</user_comment>`,
               },
             ],
             tools: [editTool],
@@ -92,18 +102,18 @@ const server = serve({
           });
 
           const message = completion.choices[0]?.message;
-          
+
           // Check if the model used a tool
           if (message?.tool_calls && message.tool_calls.length > 0) {
             const toolCall = message.tool_calls[0];
             const args = JSON.parse(toolCall.function.arguments);
-            
+
             return Response.json({
               response: message.content || "I've suggested an edit to the document based on your comment.",
               toolCall: {
                 name: toolCall.function.name,
-                arguments: args
-              }
+                arguments: args,
+              },
             });
           }
 
@@ -112,10 +122,7 @@ const server = serve({
           return Response.json({ response });
         } catch (err: any) {
           console.error("OpenRouter error:", err);
-          return Response.json(
-            { error: err.message ?? "LLM request failed" },
-            { status: 500 }
-          );
+          return Response.json({ error: err.message ?? "LLM request failed" }, { status: 500 });
         }
       },
     },

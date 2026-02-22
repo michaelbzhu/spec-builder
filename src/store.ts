@@ -53,6 +53,7 @@ interface EditorStore {
   documents: Document[];
   activeDocumentId: string | null;
   showComments: boolean;
+  activeCommentIdByDoc: Record<string, string | null>;
   generateSpec: (prompt: string) => void;
   setMarkdown: (md: string) => void;
   addComment: (
@@ -66,6 +67,9 @@ interface EditorStore {
   deleteDocument: (id: string) => void;
   goToPrompt: () => void;
   toggleComments: () => void;
+  setShowComments: (show: boolean) => void;
+  setActiveComment: (commentId: string) => void;
+  clearActiveComment: () => void;
   applyEdit: (commentId: string) => void;
   rejectEdit: (commentId: string) => void;
   dismissEdit: (commentId: string) => void;
@@ -96,6 +100,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   documents: [defaultDoc],
   activeDocumentId: "welcome",
   showComments: true,
+  activeCommentIdByDoc: { [defaultDoc.id]: null },
 
   goToPrompt: () => set({ view: "prompt", pendingSelection: null }),
 
@@ -107,14 +112,27 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   },
 
   deleteDocument: (id: string) => {
-    const { documents, activeDocumentId } = get();
+    const { documents, activeDocumentId, activeCommentIdByDoc } = get();
     const remaining = documents.filter((d) => d.id !== id);
+    const nextActiveCommentIdByDoc = { ...activeCommentIdByDoc };
+    delete nextActiveCommentIdByDoc[id];
+
     if (remaining.length === 0) {
-      set({ documents: [], activeDocumentId: null, view: "prompt" });
+      set({
+        documents: [],
+        activeDocumentId: null,
+        view: "prompt",
+        activeCommentIdByDoc: nextActiveCommentIdByDoc,
+      });
     } else if (activeDocumentId === id) {
-      set({ documents: remaining, activeDocumentId: remaining[0].id, view: "editor" });
+      set({
+        documents: remaining,
+        activeDocumentId: remaining[0].id,
+        view: "editor",
+        activeCommentIdByDoc: nextActiveCommentIdByDoc,
+      });
     } else {
-      set({ documents: remaining });
+      set({ documents: remaining, activeCommentIdByDoc: nextActiveCommentIdByDoc });
     }
   },
 
@@ -132,6 +150,38 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   },
 
   toggleComments: () => set((state) => ({ showComments: !state.showComments })),
+
+  setShowComments: (show) => set({ showComments: show }),
+
+  clearActiveComment: () => {
+    const { activeDocumentId } = get();
+    if (!activeDocumentId) return;
+
+    set((state) => ({
+      activeCommentIdByDoc: {
+        ...state.activeCommentIdByDoc,
+        [activeDocumentId]: null,
+      },
+    }));
+  },
+
+  setActiveComment: (commentId: string) => {
+    const { activeDocumentId, documents } = get();
+    if (!activeDocumentId) return;
+
+    const activeDocument = documents.find((d) => d.id === activeDocumentId);
+    if (!activeDocument) return;
+
+    const commentExists = activeDocument.comments.some((c) => c.id === commentId);
+    if (!commentExists) return;
+
+    set((state) => ({
+      activeCommentIdByDoc: {
+        ...state.activeCommentIdByDoc,
+        [activeDocumentId]: commentId,
+      },
+    }));
+  },
 
   applyEdit: (commentId: string) => {
     const { activeDocumentId } = get();
@@ -235,6 +285,10 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
           activeDocumentId: newDoc.id,
           view: "editor",
           generating: false,
+          activeCommentIdByDoc: {
+            ...state.activeCommentIdByDoc,
+            [newDoc.id]: null,
+          },
         }));
       })
       .catch((err) => {
@@ -250,6 +304,10 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
           activeDocumentId: newDoc.id,
           view: "editor",
           generating: false,
+          activeCommentIdByDoc: {
+            ...state.activeCommentIdByDoc,
+            [newDoc.id]: null,
+          },
         }));
       });
   },
@@ -257,6 +315,9 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   addComment: (selectedText, startLine, endLine, userComment, topPosition) => {
     const { activeDocumentId } = get();
     if (!activeDocumentId) return;
+    const activeDocument = get().documents.find((d) => d.id === activeDocumentId);
+    if (!activeDocument) return;
+    const documentText = activeDocument.markdown;
 
     const commentId = crypto.randomUUID();
     const comment: Comment = {
@@ -277,12 +338,17 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
           ? { ...d, comments: [comment, ...d.comments] }
           : d
       ),
+      activeCommentIdByDoc: {
+        ...state.activeCommentIdByDoc,
+        [activeDocumentId]: commentId,
+      },
+      showComments: true,
     }));
 
     fetch("/api/comment", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ selectedText, userComment }),
+      body: JSON.stringify({ selectedText, userComment, documentText }),
     })
       .then((res) => res.json())
       .then((data: any) => {
