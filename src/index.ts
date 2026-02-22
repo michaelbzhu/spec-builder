@@ -80,7 +80,7 @@ const server = serve({
               {
                 role: "system",
                 content:
-                  "You are a helpful writing assistant. The user has highlighted a passage of text and left a comment. Provide a brief, constructive response addressing their comment. If the user is asking for a specific change that can be made to the document, use the edit_document tool to suggest the exact change.",
+                  "You are a helpful writing assistant. The user has highlighted a passage of text and left a comment. Provide a brief, constructive response addressing their comment. Prefer bullet points over tables. If the user is asking for a specific change that can be made to the document, use the edit_document tool to suggest the exact change.",
               },
               {
                 role: "user",

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { marked } from "marked";
 import { parsePreviewMarkdown } from "./diffPreview";
 import { useEditorStore, type Comment } from "./store";
 
@@ -39,6 +40,35 @@ function buildLineLabel(comment: Comment): string {
   }
 
   return `Lines ${comment.startLine + 1}-${comment.endLine + 1}`;
+}
+
+function escapeHtml(markdown: string): string {
+  return markdown
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function renderMarkdown(markdown: string): string {
+  const parsed = marked.parse(escapeHtml(markdown), {
+    async: false,
+    gfm: true,
+    breaks: true,
+  });
+  return typeof parsed === "string" ? parsed : "";
+}
+
+function MarkdownCommentResponse({ markdown }: { markdown: string }) {
+  const html = useMemo(() => renderMarkdown(markdown), [markdown]);
+
+  return (
+    <div
+      className="comment-llm comment-llm-markdown"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
 }
 
 function EditSuggestionCard({ comment }: { comment: Comment }) {
@@ -117,7 +147,7 @@ function CommentThreadContent({ comment }: { comment: Comment }) {
         </div>
       ) : (
         <>
-          <div className="comment-llm">{comment.llmResponse}</div>
+          <MarkdownCommentResponse markdown={comment.llmResponse ?? ""} />
           {comment.editSuggestion && <EditSuggestionCard comment={comment} />}
         </>
       )}
