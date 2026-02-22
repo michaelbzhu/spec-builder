@@ -488,11 +488,14 @@ function EditorView() {
   const previewComment = comments.find(
     (c) => c.editSuggestion?.status === "previewing" && c.editSuggestion.previewMarkdown,
   );
+  const previewEditId = previewComment?.editSuggestion?.id ?? null;
   const previewMarkdown = previewComment?.editSuggestion?.previewMarkdown ?? "";
   const isPreviewing = Boolean(previewMarkdown);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const previewPaneRef = useRef<HTMLDivElement>(null);
   const anchorLineRef = useRef<number | null>(null);
+  const lastAutoScrolledEditIdRef = useRef<string | null>(null);
   const resizeStartXRef = useRef<number | null>(null);
   const resizeStartWidthRef = useRef(DEFAULT_CHAT_SIDEBAR_WIDTH);
 
@@ -545,6 +548,33 @@ function EditorView() {
     setCommentInput("");
     setIsDragging(false);
   }, [isPreviewing, setPendingSelection]);
+
+  useEffect(() => {
+    if (!isPreviewing || !previewEditId) {
+      lastAutoScrolledEditIdRef.current = null;
+      return;
+    }
+
+    if (lastAutoScrolledEditIdRef.current === previewEditId) return;
+    lastAutoScrolledEditIdRef.current = previewEditId;
+
+    const rafId = requestAnimationFrame(() => {
+      const previewPane = previewPaneRef.current;
+      if (!previewPane) return;
+
+      const anchor =
+        (previewPane.querySelector(".gh-line-add") as HTMLElement | null) ??
+        (previewPane.querySelector(".gh-line-del") as HTMLElement | null);
+      if (!anchor) return;
+
+      const targetTop = Math.max(0, anchor.offsetTop - previewPane.clientHeight * 0.45);
+      previewPane.scrollTo({ top: targetTop, behavior: "smooth" });
+    });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+    };
+  }, [isPreviewing, previewEditId]);
 
   useEffect(() => {
     if (activeComment) return;
@@ -810,7 +840,7 @@ function EditorView() {
           )}
 
           {isPreviewing ? (
-            <div className="editor-textarea editor-textarea--preview">
+            <div ref={previewPaneRef} className="editor-textarea editor-textarea--preview">
               <GithubDiffView previewMarkdown={previewMarkdown} />
             </div>
           ) : (
